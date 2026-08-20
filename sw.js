@@ -1,8 +1,15 @@
-const CACHE = 'receipts-v1';
-const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
+const CACHE = 'receipts-v2';
+const ASSETS = [
+  './', './index.html', './manifest.json', './icon.svg',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => Promise.allSettled(ASSETS.map(a => c.add(a))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -22,7 +29,7 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {
-        if (res && res.status === 200 && url.origin === self.location.origin) {
+        if (res && res.status === 200 && (url.origin === self.location.origin || url.hostname === 'cdnjs.cloudflare.com')) {
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }

@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#0B4F6C">
 <link rel="manifest" href="manifest.json">
 <title>Receipts</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
     --paper: #F6F5F1;
@@ -318,7 +319,7 @@
     <div class="export-bar">
       <button class="btn" onclick="buildReport()">Apply filter</button>
       <button class="btn" onclick="exportCSV()">CSV</button>
-      <button class="btn primary" onclick="window.print()">PDF</button>
+      <button class="btn primary" onclick="exportPDF()">PDF</button>
     </div>
     <div class="totals-grid" id="totalsGrid"></div>
     <div id="reportContainer"></div>
@@ -764,6 +765,185 @@ async function buildReport() {
   ).join('');
 }
 
+/* ---------- PDF ---------- */
+function blobToDataURL(blob) {
+  return new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.readAsDataURL(blob);
+  });
+}
+function imageSize(dataURL) {
+  return new Promise((resolve) => {
+    const i = new Image();
+    i.onload = () => resolve({ w: i.width, h: i.height });
+    i.onerror = () => resolve({ w: 0, h: 0 });
+    i.src = dataURL;
+  });
+}
+
+async function exportPDF() {
+  if (!reportSet.length) { showToast('Nothing to export'); return; }
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    showToast('PDF library not loaded, check connection');
+    return;
+  }
+  showToast('Building PDF...');
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const PW = 210, PH = 297, M = 15;
+  const from = document.getElementById('reportFrom').value;
+  const to = document.getElementById('reportTo').value;
+
+  // --- Summary page ---
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Expense Claim', M, 20);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(90);
+  const period = (from ? fmtDate(from) : 'start') + ' to ' + (to ? fmtDate(to) : fmtDate(new Date().toISOString().slice(0, 10)));
+  doc.text('Period: ' + period, M, 26);
+  doc.text('Generated: ' + fmtDate(new Date().toISOString().slice(0, 10)), M, 30.5);
+  doc.setTextColor(0);
+
+  // Totals
+  const totals = {};
+  reportSet.forEach(r => {
+    const k = r.jurisdiction + '|' + r.currency;
+    totals[k] = (totals[k] || 0) + r.amount;
+  });
+  let ty = 40;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('Totals', M, ty);
+  ty += 5;
+  doc.setFont('helvetica', 'normal');
+  Object.entries(totals).forEach(([k, v]) => {
+    const [j, cur] = k.split('|');
+    doc.text(j, M, ty);
+    doc.text(fmtAmount(v, cur), PW - M, ty, { align: 'right' });
+    ty += 5;
+  });
+
+  // Table
+  ty += 4;
+  doc.setDrawColor(200);
+  doc.line(M, ty, PW - M, ty);
+  ty += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  const cols = { date: M, merchant: M + 20, cat: M + 62, juris: M + 100, who: M + 122, amt: PW - M };
+  doc.text('Date', cols.date, ty);
+  doc.text('Merchant', cols.merchant, ty);
+  doc.text('Category', cols.cat, ty);
+  doc.text('Region', cols.juris, ty);
+  doc.text('Who with / purpose', cols.who, ty);
+  doc.text('Amount', cols.amt, ty, { align: 'right' });
+  ty += 2;
+  doc.line(M, ty, PW - M, ty);
+  ty += 4.5;
+
+  doc.setFont('helvetica', 'normal');
+  reportSet.forEach((r, i) => {
+    if (ty > PH - 20) { doc.addPage(); ty = 20; }
+    doc.text(fmtDate(r.date), cols.date, ty);
+    doc.text(doc.splitTextToSize(r.merchant || '', 40)[0] || '', cols.merchant, ty);
+    doc.text(doc.splitTextToSize(r.category || '', 36)[0] || '', cols.cat, ty);
+    doc.text(r.jurisdiction === 'London' ? 'London' : 'Ireland', cols.juris, ty);
+    doc.text(doc.splitTextToSize(r.companions || '', 58)[0] || '', cols.who, ty);
+    doc.text(fmtAmount(r.amount, r.currency), cols.amt, ty, { align: 'right' });
+    ty += 5;
+    doc.setDrawColor(235);
+    doc.line(M, ty - 1.8, PW - M, ty - 1.8);
+  });
+
+  // --- One page per receipt ---
+  for (let i = 0; i < reportSet.length; i++) {
+    const r = reportSet[i];
+    doc.addPage();
+    let y = 20;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text((i + 1) + '. ' + (r.merchant || ''), M, y);
+    doc.setFontSize(12);
+    doc.text(fmtAmount(r.amount, r.currency), PW - M, y, { align: 'right' });
+    y += 6;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(90);
+    doc.text(fmtDate(r.date) + '   |   ' + (r.jurisdiction === 'London' ? 'London (UK)' : 'Ireland') + '   |   ' + (r.category || ''), M, y);
+    y += 5;
+    if (r.companions) {
+      doc.setTextColor(0);
+      const lines = doc.splitTextToSize('Who with / purpose: ' + r.companions, PW - 2 * M);
+      doc.text(lines, M, y);
+      y += lines.length * 4.2;
+    }
+    if (r.notes) {
+      doc.setTextColor(90);
+      const lines = doc.splitTextToSize('Notes: ' + r.notes, PW - 2 * M);
+      doc.text(lines, M, y);
+      y += lines.length * 4.2;
+    }
+    doc.setTextColor(0);
+    y += 3;
+
+    if (r.image) {
+      try {
+        const dataURL = await blobToDataURL(r.image);
+        const size = await imageSize(dataURL);
+        if (size.w && size.h) {
+          const availW = PW - 2 * M;
+          const availH = PH - y - M;
+          const scale = Math.min(availW / size.w, availH / size.h);
+          const w = size.w * scale;
+          const h = size.h * scale;
+          doc.addImage(dataURL, 'JPEG', M + (availW - w) / 2, y, w, h, undefined, 'FAST');
+        }
+      } catch (e) {
+        console.error('image embed failed', e);
+      }
+    } else {
+      doc.setTextColor(150);
+      doc.setFontSize(9);
+      doc.text('No photo attached', M, y + 4);
+      doc.setTextColor(0);
+    }
+  }
+
+  // Page numbers
+  const pages = doc.getNumberOfPages();
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(p + ' / ' + pages, PW - M, PH - 8, { align: 'right' });
+  }
+
+  const filename = 'expenses-' + (to || new Date().toISOString().slice(0, 10)) + '.pdf';
+  const blob = doc.output('blob');
+  const file = new File([blob], filename, { type: 'application/pdf' });
+
+  // Share sheet on iOS, download elsewhere
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: 'Expense claim' });
+      return;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return;
+      console.error('share failed', e);
+    }
+  }
+  downloadBlob(blob, filename);
+  showToast('PDF saved');
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -775,13 +955,20 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function exportCSV() {
+async function exportCSV() {
   if (!reportSet.length) { showToast('Nothing to export'); return; }
   const header = ['Date', 'Merchant', 'Amount', 'Currency', 'Jurisdiction', 'Category', 'Who with / Purpose', 'Notes'];
   const rows = reportSet.map(r => [fmtDate(r.date), r.merchant, r.amount.toFixed(2), r.currency, r.jurisdiction, r.category, r.companions || '', r.notes || '']);
   const csv = [header, ...rows].map(row => row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-  downloadBlob(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }), 'expenses.csv');
-  showToast('CSV downloaded');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const filename = 'expenses-' + (document.getElementById('reportTo').value || new Date().toISOString().slice(0, 10)) + '.csv';
+  const file = new File([blob], filename, { type: 'text/csv' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Expense CSV' }); return; }
+    catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  downloadBlob(blob, filename);
+  showToast('CSV saved');
 }
 
 /* ---------- Backup ---------- */
