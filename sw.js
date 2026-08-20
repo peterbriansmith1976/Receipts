@@ -1,4 +1,4 @@
-const CACHE = 'receipts-v9';
+const CACHE = 'receipts-v10';
 const ASSETS = [
   './', './index.html', './manifest.json', './icon.svg',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
@@ -29,7 +29,11 @@ self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {
-        if (res && res.status === 200 && (url.origin === self.location.origin || url.hostname === 'cdnjs.cloudflare.com')) {
+        const cacheable = url.origin === self.location.origin ||
+          url.hostname === 'cdnjs.cloudflare.com' ||
+          url.hostname === 'fonts.googleapis.com' ||
+          url.hostname === 'fonts.gstatic.com';
+        if (res && res.status === 200 && cacheable) {
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }

@@ -8,25 +8,68 @@
 <meta name="apple-mobile-web-app-title" content="Receipts">
 <meta name="theme-color" content="#0B4F6C">
 <link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <title>Receipts</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-  :root {
-    --paper: #F6F5F1;
-    --ink: #1E2530;
-    --ink-soft: #5B6472;
-    --line: #DCD9D0;
+  :root, [data-theme="dark"] {
+    --paper: #0C1D24;
+    --card: #16303A;
+    --field: #102730;
+    --ink: #F2EDE4;
+    --ink-soft: #8FA5AE;
+    --line: #23434F;
+    --accent: #E8A33D;
+    --accent-soft: rgba(232,163,61,0.14);
+    --ireland: #4FB98C;
+    --ireland-soft: rgba(79,185,140,0.16);
+    --london: #D4847F;
+    --london-soft: rgba(212,132,127,0.16);
+    --danger: #E0736A;
+    --ok: #4FB98C;
+    --warn-ink: #E8A33D;
+    --hint-bg: rgba(232,163,61,0.12);
+    --hint-soft: rgba(232,163,61,0.07);
+    --hint-line: rgba(232,163,61,0.45);
+    --dock: rgba(12,29,36,0.92);
+    --on-accent: #0C1D24;
+    --chevron: '%238FA5AE';
+    color-scheme: dark;
+    --shadow: 0 1px 0 rgba(255,255,255,0.03) inset;
+  }
+  [data-theme="light"] select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%2364757E' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+  }
+  [data-theme="light"] {
+    --paper: #F1EEE8;
     --card: #FFFFFF;
-    --accent: #0B4F6C;
-    --accent-soft: #E5EEF1;
-    --ireland: #2F6F4E;
-    --ireland-soft: #E6F0EA;
-    --london: #6B3F2A;
-    --london-soft: #F1E6DE;
+    --field: #F8F6F2;
+    --ink: #16303A;
+    --ink-soft: #64757E;
+    --line: #E1DCD3;
+    --accent: #B87514;
+    --accent-soft: rgba(184,117,20,0.10);
+    --ireland: #2F7D5C;
+    --ireland-soft: rgba(47,125,92,0.12);
+    --london: #A85D58;
+    --london-soft: rgba(168,93,88,0.12);
     --danger: #A13A2F;
-    --ok: #2F6F4E;
-    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --ok: #2F7D5C;
+    --warn-ink: #8A5A20;
+    --hint-bg: rgba(184,117,20,0.10);
+    --hint-soft: rgba(184,117,20,0.06);
+    --hint-line: rgba(184,117,20,0.40);
+    --dock: rgba(241,238,232,0.92);
+    --on-accent: #FFFFFF;
+    --chevron: '%2364757E';
+    color-scheme: light;
+    --shadow: 0 1px 2px rgba(22,48,58,0.05);
+  }
+  :root {
+    --mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --sans: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --field-h: 46px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -38,7 +81,7 @@
     -webkit-font-smoothing: antialiased;
     padding-top: env(safe-area-inset-top);
   }
-  .app { max-width: 760px; margin: 0 auto; padding: 14px 16px 90px; }
+  .app { max-width: 760px; margin: 0 auto; padding: 14px 16px 116px; }
 
   header.top {
     display: flex; align-items: baseline; justify-content: space-between;
@@ -52,7 +95,7 @@
     flex: 1; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--line);
     background: var(--card); color: var(--ink-soft); font-size: 13px; font-weight: 600; cursor: pointer;
   }
-  nav.tabs button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  nav.tabs button.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
   .view { display: none; }
   .view.active { display: block; }
@@ -68,12 +111,12 @@
 
   input[type=text], input[type=number], input[type=date], input[type=password], textarea, select {
     width: 100%; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px;
-    font-size: 16px; font-family: var(--sans); background: #FCFBF9; color: var(--ink);
+    font-size: 16px; font-family: var(--sans); background: var(--field); color: var(--ink);
     height: var(--field-h); line-height: normal; text-align: left;
     -webkit-appearance: none; appearance: none;
   }
   select {
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%235B6472' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath fill='%238FA5AE' d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 11px center;
     background-size: 11px;
@@ -95,7 +138,7 @@
     display: flex; align-items: stretch;
     height: var(--field-h);
     border: 1px solid var(--line); border-radius: 7px;
-    background: #FCFBF9; overflow: hidden;
+    background: var(--field); overflow: hidden;
   }
   .field-combo:focus-within { outline: 2px solid var(--accent); outline-offset: -1px; }
   .field-combo select.cur {
@@ -103,7 +146,7 @@
     border: none; border-right: 1px solid var(--line); border-radius: 0;
     height: 100%; padding: 0 24px 0 10px;
     font-size: 14px; font-weight: 600; color: var(--ink-soft);
-    background-color: #F2F0EC;
+    background-color: var(--field);
     background-position: right 7px center;
     background-size: 9px;
   }
@@ -118,22 +161,22 @@
 
   .segmented { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; height: var(--field-h); }
   .segmented button {
-    flex: 1; padding: 0 6px; border: none; background: #FCFBF9; font-size: 13.5px;
+    flex: 1; padding: 0 6px; border: none; background: var(--field); font-size: 13.5px;
     font-weight: 600; color: var(--ink-soft); cursor: pointer; border-right: 1px solid var(--line);
   }
   .segmented button:last-child { border-right: none; }
   .segmented button.sel-ireland { background: var(--ireland-soft); color: var(--ireland); }
   .segmented button.sel-london { background: var(--london-soft); color: var(--london); }
 
-  .photo-box { border: 1.5px dashed var(--line); border-radius: 9px; padding: 14px; text-align: center; background: #FCFBF9; }
+  .photo-box { border: 1.5px dashed var(--line); border-radius: 9px; padding: 14px; text-align: center; background: var(--field); }
   .photo-box img { max-width: 100%; max-height: 240px; border-radius: 6px; display: block; margin: 0 auto 10px; }
   .photo-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
   .btn {
-    padding: 10px 14px; border-radius: 7px; border: 1px solid var(--line); background: #fff;
+    padding: 10px 14px; border-radius: 7px; border: 1px solid var(--line); background: var(--card);
     font-size: 13.5px; font-weight: 600; cursor: pointer; color: var(--ink);
   }
-  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .btn.danger { color: var(--danger); border-color: var(--danger); background: #fff; }
+  .btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
   .btn.full { width: 100%; padding: 13px; font-size: 15px; margin-top: 4px; }
   input[type=file] { display: none; }
 
@@ -144,9 +187,9 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.5s; } }
 
-  .autofilled { background: #FFFDF0 !important; border-color: #D9C87A !important; }
-  .field-combo.autofilled { background: #FFFDF0; border-color: #D9C87A; }
-  .field-combo.autofilled select.cur { background-color: #F6F0D8; border-right-color: #D9C87A; }
+  .autofilled { background: var(--hint-bg) !important; border-color: var(--hint-line) !important; border-radius: 8px; }
+  .field-combo.autofilled { background: var(--hint-bg); border-color: var(--hint-line); }
+  .field-combo.autofilled select.cur { background-color: var(--hint-bg); border-right-color: var(--hint-line); }
   .field-combo.autofilled input.amt { background: transparent !important; }
   .read-note { font-size: 11.5px; color: var(--ink-soft); margin-top: 8px; text-align: center; font-style: italic; }
 
@@ -169,6 +212,43 @@
 
   .empty { text-align: center; padding: 40px 16px; color: var(--ink-soft); font-size: 14px; }
 
+  .edit-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: var(--accent-soft); border: 1px solid var(--hint-line); color: var(--accent);
+    border-radius: 9px; padding: 10px 12px; margin-bottom: 12px;
+    font-size: 13.5px; font-weight: 700;
+  }
+  .edit-banner .btn { padding: 6px 12px; font-size: 12.5px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chips button {
+    border: 1px solid var(--line); background: transparent; border-radius: 20px;
+    padding: 6px 11px; font-size: 12.5px; color: var(--ink-soft); cursor: pointer;
+    font-family: var(--sans); font-weight: 600;
+  }
+  .chips button:active { background: var(--accent-soft); }
+
+  .tag.claimed { background: var(--field); color: var(--ink-soft); }
+
+  .preflight {
+    background: var(--hint-bg); border: 1px solid var(--hint-line); border-radius: 10px;
+    padding: 13px 14px; margin-bottom: 14px;
+  }
+  .preflight.clean { background: var(--ireland-soft); border-color: #BBD5C5; }
+  .preflight .pf-title { font-weight: 700; font-size: 13.5px; margin-bottom: 6px; color: var(--warn-ink); }
+  .preflight.clean .pf-title { color: var(--ok); margin-bottom: 0; }
+  .preflight .pf-item {
+    font-size: 12.5px; color: var(--ink); padding: 5px 0; cursor: pointer;
+    border-top: 1px solid rgba(0,0,0,0.06);
+  }
+  .preflight .pf-item span { color: var(--warn-ink); font-weight: 600; }
+
+  .batch-progress {
+    display: none; margin-top: 12px; padding: 12px; border-radius: 9px;
+    background: var(--accent-soft); font-size: 13px; color: var(--accent); font-weight: 600; text-align: center;
+  }
+  .batch-progress.show { display: block; }
+
   .totals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
   .total-card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   .total-card .label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); font-weight: 700; }
@@ -183,14 +263,14 @@
   .report-item .head .amount { font-family: var(--mono); font-weight: 700; font-size: 15.5px; white-space: nowrap; }
   .report-item .detail-line { font-size: 12.5px; color: var(--ink-soft); margin: 3px 0; }
   .report-item .detail-line b { color: var(--ink); font-weight: 600; }
-  .report-item img.receipt-img { width: 100%; max-height: 340px; object-fit: contain; border-radius: 6px; margin-top: 10px; border: 1px solid var(--line); background: #fafafa; }
+  .report-item img.receipt-img { width: 100%; max-height: 340px; object-fit: contain; border-radius: 6px; margin-top: 10px; border: 1px solid var(--line); background: var(--field); }
 
   .export-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
   .export-bar .btn { flex: 1; min-width: 100px; }
 
   .toast {
     position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
-    background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 8px;
+    background: var(--ink); color: var(--paper); padding: 11px 18px; border-radius: 8px;
     font-size: 13.5px; font-weight: 600; z-index: 50; opacity: 0; pointer-events: none;
     transition: opacity .2s; max-width: 90%; text-align: center;
   }
@@ -200,11 +280,149 @@
   .status-line b { color: var(--ink); }
   .pill { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
   .pill.ok { background: var(--ireland-soft); color: var(--ok); }
-  .pill.warn { background: #FBEEDC; color: #8A5A20; }
+  .pill.warn { background: var(--hint-bg); color: var(--warn-ink); }
 
   .helptext { font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
   .helptext ol { padding-left: 18px; margin: 8px 0; }
   .helptext li { margin-bottom: 5px; }
+
+  /* ---------- Redesigned Add screen ---------- */
+  .stub {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .stub-top { padding: 14px 14px 12px; }
+
+  .capture {
+    position: relative;
+    border-radius: 10px;
+    background: var(--field);
+    border: 1px solid var(--line);
+    min-height: 168px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .capture img { width: 100%; max-height: 300px; object-fit: contain; display: none; }
+  .capture.has-photo { min-height: 0; border-style: solid; }
+  .capture-empty { text-align: center; padding: 26px 16px; }
+  .capture-empty .mark {
+    width: 40px; height: 52px; color: var(--accent);
+    margin: 0 auto 12px; display: block;
+  }
+  .capture-empty .line { font-size: 13.5px; color: var(--ink-soft); }
+
+  .scanline {
+    position: absolute; left: 0; right: 0; height: 34%;
+    background: linear-gradient(to bottom, transparent, var(--accent-soft), transparent);
+    border-bottom: 1px solid var(--accent);
+    opacity: 0; pointer-events: none;
+  }
+  .capture.reading .scanline { opacity: 1; animation: sweep 1.5s ease-in-out infinite; }
+  @keyframes sweep { 0% { top: -34%; } 100% { top: 100%; } }
+  @media (prefers-reduced-motion: reduce) {
+    .capture.reading .scanline { animation: none; opacity: .5; top: 33%; }
+  }
+
+  .capture-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .capture-actions .btn { flex: 1; padding: 10px 6px; font-size: 13px; }
+
+  /* Perforation between evidence and declaration */
+  .perf { position: relative; height: 22px; }
+  .perf::before, .perf::after {
+    content: ''; position: absolute; top: 50%; transform: translateY(-50%);
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--paper); border: 1px solid var(--line);
+  }
+  .perf::before { left: -10px; }
+  .perf::after { right: -10px; }
+  .perf .dashes {
+    position: absolute; top: 50%; left: 14px; right: 14px; height: 1px;
+    background-image: linear-gradient(to right, var(--line) 0 6px, transparent 6px 12px);
+    background-size: 12px 1px;
+  }
+
+  .stub-bottom { padding: 4px 16px 18px; }
+
+  .amount-hero { display: flex; align-items: baseline; justify-content: center; gap: 6px; padding: 6px 0 2px; }
+  .amount-hero button.cur-btn {
+    font-family: var(--mono); font-size: 24px; font-weight: 600;
+    color: var(--accent); background: none; border: none; padding: 0 2px;
+    cursor: pointer; line-height: 1;
+  }
+  .amount-hero input.amt-hero {
+    font-family: var(--mono); font-size: 40px; font-weight: 600;
+    color: var(--ink); background: none; border: none; padding: 0;
+    width: 100%; max-width: 240px; text-align: left; height: auto;
+    letter-spacing: -0.02em;
+  }
+  .amount-hero input.amt-hero::placeholder { color: var(--line); }
+  .amount-hero input.amt-hero:focus { outline: none; }
+  .amount-hero.autofilled { background: var(--hint-soft) !important; border: none !important; border-radius: 10px; }
+
+  .merchant-hero {
+    width: 100%; text-align: center; background: none; border: none;
+    font-family: var(--sans); font-size: 18px; font-weight: 600; color: var(--ink);
+    height: auto; padding: 4px 0 12px;
+  }
+  .merchant-hero::placeholder { color: var(--ink-soft); font-weight: 400; }
+  .merchant-hero:focus { outline: none; }
+  .merchant-hero.autofilled { background: var(--hint-soft) !important; border: none !important; border-radius: 10px; }
+
+  .frow {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 0; border-top: 1px solid var(--line);
+  }
+  .frow > .flabel {
+    font-size: 12.5px; font-weight: 600; color: var(--ink-soft);
+    flex: 0 0 auto; letter-spacing: 0.01em;
+  }
+  .frow > .fvalue { flex: 1 1 auto; min-width: 0; text-align: right; }
+  .frow input, .frow select {
+    background: none; border: none; height: auto; padding: 0;
+    font-size: 15px; color: var(--ink); text-align: right; width: 100%;
+    font-family: var(--sans); font-weight: 500;
+  }
+  .frow select { padding-right: 18px; background-position: right center; background-size: 10px; }
+  .frow input:focus, .frow select:focus { outline: none; }
+  .frow input.autofilled, .frow select.autofilled { background: var(--hint-bg); border-radius: 6px; }
+  .frow.stacked { display: block; }
+  .frow.stacked .flabel { display: block; margin-bottom: 8px; }
+  .frow.stacked input { text-align: left; }
+
+  .pills { display: flex; gap: 8px; }
+  .pills button {
+    padding: 8px 14px; border-radius: 20px; border: 1px solid var(--line);
+    background: none; color: var(--ink-soft); font-size: 13px; font-weight: 600;
+    font-family: var(--sans); cursor: pointer;
+  }
+  .pills button.on-ireland { background: var(--ireland-soft); border-color: var(--ireland); color: var(--ireland); }
+  .pills button.on-london { background: var(--london-soft); border-color: var(--london); color: var(--london); }
+
+  .note-toggle {
+    background: none; border: none; color: var(--accent); font-family: var(--sans);
+    font-size: 13.5px; font-weight: 600; padding: 12px 0 0; cursor: pointer;
+  }
+
+  .save-dock {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+    background: var(--dock);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+  }
+  .save-dock .btn { width: 100%; padding: 14px; font-size: 15.5px; max-width: 728px; margin: 0 auto; display: block; }
+
+  .theme-seg { display: flex; gap: 8px; }
+  .theme-seg button {
+    flex: 1; padding: 11px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--field); color: var(--ink-soft); font-family: var(--sans);
+    font-size: 13.5px; font-weight: 600; cursor: pointer;
+  }
+  .theme-seg button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
   @media print {
     nav.tabs, .filters, .export-bar, header.top .sub, .no-print { display: none !important; }
@@ -231,70 +449,98 @@
 
   <!-- ADD -->
   <div class="view active" id="view-add">
-    <div class="card">
-      <label>Receipt photo</label>
-      <div class="photo-box">
-        <div id="photoEmpty" style="padding:16px 0;color:var(--ink-soft);font-size:13px;">No photo yet</div>
-        <img id="photoPreview" style="display:none;" alt="Receipt preview">
-        <div class="photo-actions">
+    <div class="edit-banner" id="editBanner" style="display:none;">
+      <span>Editing saved receipt</span>
+      <button class="btn" type="button" onclick="cancelEdit()">Cancel</button>
+    </div>
+    <div class="stub">
+      <div class="stub-top">
+        <div class="capture" id="capturePanel">
+          <div class="capture-empty" id="photoEmpty">
+            <svg class="mark" viewBox="0 0 40 52" fill="none" aria-hidden="true">
+              <path d="M4 4h32v40l-4-3-4 3-4-3-4 3-4-3-4 3-4-3-4 3z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M12 15h16M12 23h16M12 31h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity=".55"/>
+            </svg>
+            <div class="line">Photograph the receipt and the details fill themselves</div>
+          </div>
+          <img id="photoPreview" alt="Receipt">
+          <div class="scanline" id="scanLine"></div>
+        </div>
+        <div class="capture-actions">
           <button class="btn" type="button" onclick="document.getElementById('cameraInput').click()">Take photo</button>
-          <button class="btn" type="button" onclick="document.getElementById('fileInput').click()">Choose photo</button>
+          <button class="btn" type="button" onclick="document.getElementById('fileInput').click()">Choose</button>
+          <button class="btn" type="button" id="batchBtn" onclick="document.getElementById('batchInput').click()">Import several</button>
         </div>
         <input type="file" id="cameraInput" accept="image/*" capture="environment">
         <input type="file" id="fileInput" accept="image/*">
+        <input type="file" id="batchInput" accept="image/*" multiple>
         <div class="scan-status" id="scanStatus"><span class="spinner"></span><span id="scanText">Reading receipt</span></div>
-      </div>
-      <div class="read-note" id="readNote" style="display:none;">Yellow fields were read from the photo. Check them before saving.</div>
-
-      <label>Jurisdiction</label>
-      <div class="segmented" id="jurisdictionSeg">
-        <button type="button" data-val="Ireland">Ireland</button>
-        <button type="button" data-val="London">London (UK)</button>
+        <div class="read-note" id="readNote" style="display:none;">Highlighted fields were read from the photo. Check them before saving.</div>
       </div>
 
-      <div class="row2">
-        <div>
-          <label>Date</label>
-          <input type="date" id="fDate">
+      <div class="perf"><span class="dashes"></span></div>
+
+      <div class="stub-bottom">
+        <div class="amount-hero" id="amountHero">
+          <button type="button" class="cur-btn" id="curBtn" onclick="toggleCurrency()" aria-label="Currency">€</button>
+          <input type="number" id="fAmount" class="amt-hero" step="0.01" inputmode="decimal" placeholder="0.00">
+          <input type="hidden" id="fCurrency" value="EUR">
         </div>
-        <div>
-          <label>Amount</label>
-          <div class="field-combo">
-            <select id="fCurrency" class="cur" aria-label="Currency">
-              <option value="EUR">€</option>
-              <option value="GBP">£</option>
+        <input type="text" id="fMerchant" class="merchant-hero" placeholder="Merchant">
+
+        <div class="frow">
+          <span class="flabel">Date</span>
+          <span class="fvalue"><input type="date" id="fDate"></span>
+        </div>
+
+        <div class="frow">
+          <span class="flabel">Region</span>
+          <span class="fvalue">
+            <span class="pills" id="jurisdictionSeg" style="justify-content:flex-end;">
+              <button type="button" data-val="Ireland">Ireland</button>
+              <button type="button" data-val="London">London</button>
+            </span>
+          </span>
+        </div>
+
+        <div class="frow">
+          <span class="flabel">Category</span>
+          <span class="fvalue">
+            <select id="fCategory">
+              <option>Meals</option>
+              <option>Coffee / incidentals</option>
+              <option>Client entertainment</option>
+              <option>Travel</option>
+              <option>Accommodation</option>
+              <option>Other</option>
             </select>
-            <input type="number" id="fAmount" class="amt" step="0.01" inputmode="decimal" placeholder="0.00">
-          </div>
+          </span>
         </div>
+
+        <div class="frow stacked">
+          <span class="flabel">Who with</span>
+          <input type="text" id="fCompanions" placeholder="Names and purpose">
+          <div class="chips" id="peopleChips"></div>
+        </div>
+
+        <div class="frow stacked" id="noteRow" style="display:none;">
+          <span class="flabel">Note</span>
+          <textarea id="fNotes" placeholder="Anything your EA should know"></textarea>
+        </div>
+        <button type="button" class="note-toggle" id="noteToggle" onclick="toggleNote()">+ Add note</button>
       </div>
-
-      <label>Merchant</label>
-      <input type="text" id="fMerchant" placeholder="e.g. Coffeeangel, Aer Lingus">
-
-      <label>Category</label>
-      <select id="fCategory">
-        <option>Meals</option>
-        <option>Coffee / incidentals</option>
-        <option>Client entertainment</option>
-        <option>Travel</option>
-        <option>Accommodation</option>
-        <option>Other</option>
-      </select>
-
-      <label>Who with / purpose <span class="hint">(optional)</span></label>
-      <input type="text" id="fCompanions" placeholder="Names and purpose">
-
-      <label>Notes</label>
-      <textarea id="fNotes" placeholder="Anything your EA should know"></textarea>
-
-      <button class="btn primary full" onclick="saveReceipt()">Save receipt</button>
     </div>
+
   </div>
 
   <!-- LIST -->
   <div class="view" id="view-list">
     <div class="filters">
+      <select id="listFilterStatus">
+        <option value="">All statuses</option>
+        <option value="unclaimed">Unclaimed</option>
+        <option value="claimed">Claimed</option>
+      </select>
       <select id="listFilterJurisdiction">
         <option value="">All jurisdictions</option>
         <option value="Ireland">Ireland</option>
@@ -302,31 +548,49 @@
       </select>
       <select id="listFilterCategory"><option value="">All categories</option></select>
     </div>
+    <div class="helptext no-print" style="margin:-6px 2px 12px;">Tap a receipt to edit it.</div>
     <div id="listContainer"></div>
   </div>
 
   <!-- REPORT -->
   <div class="view" id="view-report">
     <div class="filters no-print">
-      <input type="date" id="reportFrom" aria-label="From date">
-      <input type="date" id="reportTo" aria-label="To date">
+      <select id="reportStatus">
+        <option value="unclaimed">Unclaimed only</option>
+        <option value="">All</option>
+        <option value="claimed">Claimed only</option>
+      </select>
       <select id="reportJurisdiction">
         <option value="">All jurisdictions</option>
         <option value="Ireland">Ireland</option>
         <option value="London">London (UK)</option>
       </select>
     </div>
+    <div class="filters no-print">
+      <input type="date" id="reportFrom" aria-label="From date">
+      <input type="date" id="reportTo" aria-label="To date">
+    </div>
     <div class="export-bar">
       <button class="btn" onclick="buildReport()">Apply filter</button>
       <button class="btn" onclick="exportCSV()">CSV</button>
       <button class="btn primary" onclick="exportPDF()">PDF</button>
     </div>
+    <div id="preflightPanel"></div>
     <div class="totals-grid" id="totalsGrid"></div>
     <div id="reportContainer"></div>
+    <div class="no-print" id="claimActions"></div>
   </div>
 
   <!-- SETTINGS -->
   <div class="view" id="view-settings">
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Appearance</div>
+      <div class="theme-seg" id="themeSeg">
+        <button type="button" data-theme-val="dark">Night</button>
+        <button type="button" data-theme-val="light">Day</button>
+      </div>
+    </div>
+
     <div class="card">
       <div style="font-weight:700;font-size:15px;margin-bottom:8px;">App version</div>
       <div class="status-line" id="versionStatus">Checking...</div>
@@ -348,14 +612,17 @@
         Paste an Anthropic API key to have photos read automatically. Without a key the app still works, you just type the details yourself. The key is stored only on this device and is sent only to Anthropic.
       </div>
       <label>API key</label>
-      <input type="password" id="fApiKey" placeholder="sk-ant-..." autocomplete="off">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="password" id="fApiKey" placeholder="sk-ant-..." autocomplete="off" style="flex:1;">
+        <button class="btn" type="button" onclick="toggleKeyVisible()" id="keyToggleBtn" style="flex:0 0 auto;">Show</button>
+      </div>
       <button class="btn full" style="margin-top:10px;" onclick="saveApiKey()">Save key</button>
       <div class="status-line" id="keyStatus"></div>
     </div>
 
     <div class="card">
       <div style="font-weight:700;font-size:15px;margin-bottom:8px;">Backup</div>
-      <div class="helptext">Export everything including photos to a single file. Keep a copy after each expense claim.</div>
+      <div class="helptext">Export everything including photos and your API key to a single file. Keep a copy after each expense claim. Treat the file as sensitive, since it contains your key.</div>
       <div class="export-bar" style="margin-top:12px;margin-bottom:0;">
         <button class="btn" onclick="exportBackup()">Export backup</button>
         <button class="btn" onclick="document.getElementById('restoreInput').click()">Restore</button>
@@ -376,11 +643,14 @@
     </div>
   </div>
 </div>
+<div class="save-dock" id="saveDock">
+  <button class="btn primary" id="saveBtn" onclick="saveReceipt()">Save receipt</button>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
 /* ---------- IndexedDB ---------- */
-const APP_VERSION = '2.1';
+const APP_VERSION = '2.2';
 const DB_NAME = 'receipts-db';
 const DB_VERSION = 1;
 let db = null;
@@ -466,6 +736,8 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
     window.scrollTo(0, 0);
+    document.getElementById('saveDock').style.display = btn.dataset.view === 'add' ? 'block' : 'none';
+    if (btn.dataset.view === 'add') refreshPeopleChips();
     if (btn.dataset.view === 'list') renderList();
     if (btn.dataset.view === 'report') buildReport();
     if (btn.dataset.view === 'settings') { refreshStorageStatus(); showVersion(); }
@@ -475,9 +747,46 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
 function setJurisdiction(val) {
   jurisdiction = val;
   document.querySelectorAll('#jurisdictionSeg button').forEach(b => {
-    b.classList.remove('sel-ireland', 'sel-london');
-    if (b.dataset.val === val) b.classList.add(val === 'Ireland' ? 'sel-ireland' : 'sel-london');
+    b.classList.remove('on-ireland', 'on-london');
+    if (b.dataset.val === val) b.classList.add(val === 'Ireland' ? 'on-ireland' : 'on-london');
   });
+}
+
+/* ---------- Theme ---------- */
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', t === 'light' ? '#F1EEE8' : '#0C1D24');
+  document.querySelectorAll('#themeSeg button').forEach(b => {
+    b.classList.toggle('active', b.dataset.themeVal === t);
+  });
+  try { localStorage.setItem('receipts-theme', t); } catch (e) {}
+}
+function initTheme() {
+  let t = 'dark';
+  try { t = localStorage.getItem('receipts-theme') || 'dark'; } catch (e) {}
+  applyTheme(t);
+}
+initTheme();
+document.querySelectorAll('#themeSeg button').forEach(b => {
+  b.addEventListener('click', () => applyTheme(b.dataset.themeVal));
+});
+
+/* ---------- Currency and note ---------- */
+function setCurrency(cur) {
+  document.getElementById('fCurrency').value = cur;
+  document.getElementById('curBtn').textContent = cur === 'GBP' ? '£' : '€';
+}
+function toggleCurrency() {
+  setCurrency(document.getElementById('fCurrency').value === 'EUR' ? 'GBP' : 'EUR');
+}
+function toggleNote(force) {
+  const row = document.getElementById('noteRow');
+  const btn = document.getElementById('noteToggle');
+  const show = force !== undefined ? force : row.style.display === 'none';
+  row.style.display = show ? 'block' : 'none';
+  btn.style.display = show ? 'none' : 'block';
+  if (show) document.getElementById('fNotes').focus();
 }
 document.querySelectorAll('#jurisdictionSeg button').forEach(b => {
   b.addEventListener('click', () => setJurisdiction(b.dataset.val));
@@ -498,33 +807,59 @@ function compressToBlob(img, maxW, quality) {
   });
 }
 
-function handleFile(file) {
+function handleFile(file, inputEl) {
   if (!file) return;
+  // Only release the input once the read is done. Clearing it mid-read can
+  // invalidate the underlying file handle and the photo silently never arrives.
+  const release = () => { if (inputEl) { try { inputEl.value = ''; } catch (e) {} } };
+  const fail = () => { release(); showToast('Could not read that photo'); };
+
   const reader = new FileReader();
+  reader.onerror = fail;
   reader.onload = (e) => {
     const img = new Image();
+    img.onerror = fail;
     img.onload = async () => {
-      // 1600px keeps small print legible; Blob storage means size is not a constraint
-      currentBlob = await compressToBlob(img, 1600, 0.82);
-      if (currentPreviewURL) URL.revokeObjectURL(currentPreviewURL);
-      currentPreviewURL = URL.createObjectURL(currentBlob);
-      const prev = document.getElementById('photoPreview');
-      prev.src = currentPreviewURL;
-      prev.style.display = 'block';
-      document.getElementById('photoEmpty').style.display = 'none';
-      scanReceipt();
+      try {
+        // 1600px keeps small print legible; Blob storage means size is not a constraint
+        currentBlob = await compressToBlob(img, 1600, 0.82);
+        if (currentPreviewURL) URL.revokeObjectURL(currentPreviewURL);
+        currentPreviewURL = URL.createObjectURL(currentBlob);
+        showPhoto(currentPreviewURL);
+        release();
+        scanReceipt();
+      } catch (err) {
+        console.error(err);
+        fail();
+      }
     };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
-document.getElementById('cameraInput').addEventListener('change', e => { handleFile(e.target.files[0]); e.target.value = ''; });
-document.getElementById('fileInput').addEventListener('change', e => { handleFile(e.target.files[0]); e.target.value = ''; });
+document.getElementById('cameraInput').addEventListener('change', e => handleFile(e.target.files[0], e.target));
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0], e.target));
 
 /* ---------- AI extraction ---------- */
+function showPhoto(url) {
+  const prev = document.getElementById('photoPreview');
+  prev.src = url;
+  prev.style.display = 'block';
+  document.getElementById('photoEmpty').style.display = 'none';
+  document.getElementById('capturePanel').classList.add('has-photo');
+}
+function clearPhoto() {
+  const prev = document.getElementById('photoPreview');
+  prev.removeAttribute('src');
+  prev.style.display = 'none';
+  document.getElementById('photoEmpty').style.display = 'block';
+  document.getElementById('capturePanel').classList.remove('has-photo', 'reading');
+}
+
 function setScanStatus(state, msg) {
   const el = document.getElementById('scanStatus');
   const spin = el.querySelector('.spinner');
+  document.getElementById('capturePanel').classList.toggle('reading', state === 'loading');
   if (state === 'hide') { el.classList.remove('show'); return; }
   el.classList.add('show');
   el.classList.toggle('err', state === 'error');
@@ -532,8 +867,8 @@ function setScanStatus(state, msg) {
   document.getElementById('scanText').textContent = msg;
 }
 function markAutofilled(el) {
-  const combo = el.closest ? el.closest('.field-combo') : null;
-  const target = combo || el;
+  const wrap = el.closest ? el.closest('.amount-hero, .field-combo') : null;
+  const target = wrap || el;
   target.classList.add('autofilled');
   const clear = () => target.classList.remove('autofilled');
   el.addEventListener('input', clear, { once: true });
@@ -552,12 +887,8 @@ function blobToBase64(blob) {
   });
 }
 
-async function scanReceipt() {
-  if (!currentBlob) return;
-  if (!apiKey) { setScanStatus('hide'); return; }
-  clearAutofills();
-  setScanStatus('loading', 'Reading receipt');
-
+async function extractFromBlob(blob) {
+  if (!apiKey) return null;
   const categories = [...document.getElementById('fCategory').options].map(o => o.text);
   const prompt = 'Read this receipt and return ONLY a JSON object, no preamble and no markdown fences, with these keys:\n' +
     '{"date":"YYYY-MM-DD or null","merchant":"trading name or null","amount":number or null,"currency":"EUR" or "GBP" or null,"category":one of ' +
@@ -569,37 +900,46 @@ async function scanReceipt() {
     '- category: a cafe is "Coffee / incidentals"; a restaurant or pub meal is "Meals"; flights, trains, taxis and fuel are "Travel"; hotels are "Accommodation".\n' +
     '- Use null for anything you cannot read confidently. Do not guess.';
 
+  const base64 = await blobToBase64(blob);
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+          { type: 'text', text: prompt }
+        ]
+      }]
+    })
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    console.error('API error', res.status, body);
+    const err = new Error('api'); err.status = res.status; throw err;
+  }
+  const data = await res.json();
+  const text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+  return JSON.parse(text.replace(/```json|```/g, '').trim());
+}
+
+async function scanReceipt() {
+  if (!currentBlob) return;
+  if (!apiKey) { setScanStatus('hide'); return; }
+  clearAutofills();
+  setScanStatus('loading', 'Reading receipt');
+
   try {
-    const base64 = await blobToBase64(currentBlob);
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
-            { type: 'text', text: prompt }
-          ]
-        }]
-      })
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      console.error('API error', res.status, body);
-      setScanStatus('error', res.status === 401 ? 'API key rejected. Check it in Setup.' : 'Could not read it. Enter details manually.');
-      return;
-    }
-    const data = await res.json();
-    const text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    const parsed = await extractFromBlob(currentBlob);
+    if (!parsed) { setScanStatus('hide'); return; }
 
     let filled = 0;
     if (parsed.date) { const d = document.getElementById('fDate'); d.value = parsed.date; markAutofilled(d); filled++; }
@@ -607,9 +947,7 @@ async function scanReceipt() {
     if (typeof parsed.amount === 'number' && !isNaN(parsed.amount)) {
       const a = document.getElementById('fAmount'); a.value = parsed.amount.toFixed(2); markAutofilled(a); filled++;
     }
-    if (parsed.currency === 'EUR' || parsed.currency === 'GBP') {
-      const c = document.getElementById('fCurrency'); c.value = parsed.currency; markAutofilled(c);
-    }
+    if (parsed.currency === 'EUR' || parsed.currency === 'GBP') setCurrency(parsed.currency);
     const cats = [...document.getElementById('fCategory').options].map(o => o.text);
     if (parsed.category && cats.includes(parsed.category)) {
       const cat = document.getElementById('fCategory'); cat.value = parsed.category; markAutofilled(cat);
@@ -625,7 +963,7 @@ async function scanReceipt() {
     }
   } catch (e) {
     console.error(e);
-    setScanStatus('error', 'Could not read it. Enter details manually.');
+    setScanStatus('error', e.status === 401 ? 'API key rejected. Check it in Setup.' : 'Could not read it. Enter details manually.');
   }
 }
 
@@ -633,18 +971,70 @@ async function scanReceipt() {
 function resetForm() {
   currentBlob = null;
   if (currentPreviewURL) { URL.revokeObjectURL(currentPreviewURL); currentPreviewURL = null; }
-  document.getElementById('photoPreview').style.display = 'none';
-  document.getElementById('photoEmpty').style.display = 'block';
+  clearPhoto();
   document.getElementById('fDate').valueAsDate = new Date();
   document.getElementById('fAmount').value = '';
   document.getElementById('fMerchant').value = '';
   document.getElementById('fCompanions').value = '';
   document.getElementById('fNotes').value = '';
   document.getElementById('fCategory').selectedIndex = 0;
-  document.getElementById('fCurrency').selectedIndex = 0;
+  setCurrency('EUR');
   setJurisdiction('Ireland');
+  toggleNote(false);
   clearAutofills();
   setScanStatus('hide');
+}
+
+let editingId = null;
+
+function setEditMode(on) {
+  document.getElementById('editBanner').style.display = on ? 'flex' : 'none';
+  document.getElementById('saveBtn').textContent = on ? 'Update receipt' : 'Save receipt';
+  document.getElementById('batchBtn').style.display = on ? 'none' : '';
+}
+
+function cancelEdit() {
+  editingId = null;
+  setEditMode(false);
+  resetForm();
+  showToast('Edit cancelled');
+}
+
+async function openEdit(id) {
+  const all = await getAllReceipts();
+  const r = all.find(x => x.id === id);
+  if (!r) { showToast('Receipt not found'); return; }
+
+  editingId = id;
+  currentBlob = r.image || null;
+  if (currentPreviewURL) { URL.revokeObjectURL(currentPreviewURL); currentPreviewURL = null; }
+  if (r.image) {
+    currentPreviewURL = URL.createObjectURL(r.image);
+    showPhoto(currentPreviewURL);
+  } else {
+    clearPhoto();
+  }
+
+  document.getElementById('fDate').value = r.date || '';
+  document.getElementById('fAmount').value = r.amount != null ? r.amount : '';
+  setCurrency(r.currency === 'GBP' ? 'GBP' : 'EUR');
+  document.getElementById('fMerchant').value = r.merchant || '';
+  document.getElementById('fCategory').value = r.category || 'Meals';
+  document.getElementById('fCompanions').value = r.companions || '';
+  document.getElementById('fNotes').value = r.notes || '';
+  toggleNote(!!r.notes);
+  setJurisdiction(r.jurisdiction === 'London' ? 'London' : 'Ireland');
+  clearAutofills();
+  setScanStatus('hide');
+  setEditMode(true);
+
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelector('nav.tabs button[data-view="add"]').classList.add('active');
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById('view-add').classList.add('active');
+  document.getElementById('saveDock').style.display = 'block';
+  window.scrollTo(0, 0);
+  refreshPeopleChips();
 }
 
 async function saveReceipt() {
@@ -652,8 +1042,14 @@ async function saveReceipt() {
   const merchant = document.getElementById('fMerchant').value.trim();
   if (!merchant || isNaN(amount)) { showToast('Add a merchant and amount'); return; }
 
+  let existing = null;
+  if (editingId) {
+    const all = await getAllReceipts();
+    existing = all.find(x => x.id === editingId) || null;
+  }
+
   const rec = {
-    id: 'r' + Date.now(),
+    id: editingId || ('r' + Date.now()),
     date: document.getElementById('fDate').value,
     merchant,
     amount,
@@ -663,18 +1059,125 @@ async function saveReceipt() {
     companions: document.getElementById('fCompanions').value.trim(),
     notes: document.getElementById('fNotes').value.trim(),
     image: currentBlob || null,
-    createdAt: Date.now()
+    claimed: existing ? !!existing.claimed : false,
+    claimedAt: existing ? (existing.claimedAt || null) : null,
+    createdAt: existing ? existing.createdAt : Date.now()
   };
 
   try {
     await putReceipt(rec);
-    showToast('Receipt saved');
+    showToast(editingId ? 'Receipt updated' : 'Receipt saved');
+    editingId = null;
+    setEditMode(false);
     resetForm();
     refreshCount();
+    refreshPeopleChips();
   } catch (e) {
     console.error(e);
     showToast('Save failed: ' + (e && e.name ? e.name : 'unknown'));
   }
+}
+
+/* ---------- Batch import ---------- */
+function setBatchProgress(msg) {
+  let el = document.getElementById('batchProgress');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'batchProgress';
+    el.className = 'batch-progress';
+    document.querySelector('#view-add .card').appendChild(el);
+  }
+  if (msg === null) { el.classList.remove('show'); return; }
+  el.classList.add('show');
+  el.textContent = msg;
+}
+
+async function handleBatch(files) {
+  const list = Array.from(files);
+  if (!list.length) return;
+  let saved = 0, unread = 0;
+
+  for (let i = 0; i < list.length; i++) {
+    setBatchProgress('Processing ' + (i + 1) + ' of ' + list.length + '...');
+    try {
+      const blob = await fileToCompressedBlob(list[i]);
+      let parsed = null;
+      try { parsed = await extractFromBlob(blob); }
+      catch (e) { console.error('scan failed', e); }
+
+      const cats = [...document.getElementById('fCategory').options].map(o => o.text);
+      const rec = {
+        id: 'r' + Date.now() + '_' + i,
+        date: (parsed && parsed.date) || new Date().toISOString().slice(0, 10),
+        merchant: (parsed && parsed.merchant) || '',
+        amount: (parsed && typeof parsed.amount === 'number') ? parsed.amount : 0,
+        currency: (parsed && (parsed.currency === 'GBP' ? 'GBP' : 'EUR')) || 'EUR',
+        jurisdiction: (parsed && parsed.jurisdiction === 'London') ? 'London' : 'Ireland',
+        category: (parsed && cats.includes(parsed.category)) ? parsed.category : 'Other',
+        companions: '',
+        notes: '',
+        image: blob,
+        claimed: false,
+        claimedAt: null,
+        createdAt: Date.now() + i
+      };
+      if (!parsed || !parsed.merchant || typeof parsed.amount !== 'number') unread++;
+      await putReceipt(rec);
+      saved++;
+    } catch (e) {
+      console.error('batch item failed', e);
+    }
+  }
+
+  setBatchProgress(null);
+  await refreshCount();
+  await refreshPeopleChips();
+  showToast(saved + ' imported' + (unread ? ', ' + unread + ' need checking' : ''));
+  document.querySelector('nav.tabs button[data-view="report"]').click();
+}
+
+function fileToCompressedBlob(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = async () => resolve(await compressToBlob(img, 1600, 0.82));
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('batchInput').addEventListener('change', e => {
+  const el = e.target;
+  handleBatch(el.files).finally(() => { try { el.value = ''; } catch (err) {} });
+});
+
+/* ---------- Attendee chips ---------- */
+async function refreshPeopleChips() {
+  const all = await getAllReceipts();
+  const seen = [];
+  all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).forEach(r => {
+    (r.companions || '').split(',').map(s => s.trim()).filter(Boolean).forEach(n => {
+      if (!seen.some(x => x.toLowerCase() === n.toLowerCase())) seen.push(n);
+    });
+  });
+  const el = document.getElementById('peopleChips');
+  if (!el) return;
+  el.innerHTML = seen.slice(0, 10)
+    .map(n => '<button type="button" onclick="addPerson(' + JSON.stringify(n).replace(/"/g, '&quot;') + ')">' + escapeHTML(n) + '</button>')
+    .join('');
+}
+
+function addPerson(name) {
+  const f = document.getElementById('fCompanions');
+  const cur = f.value.trim();
+  const parts = cur ? cur.split(',').map(s => s.trim()).filter(Boolean) : [];
+  if (parts.some(p => p.toLowerCase() === name.toLowerCase())) return;
+  parts.push(name);
+  f.value = parts.join(', ');
 }
 
 async function deleteReceipt(id) {
@@ -708,29 +1211,48 @@ async function refreshCount() {
 async function renderList() {
   releaseURLs();
   const all = await getAllReceipts();
+  const sF = document.getElementById('listFilterStatus').value;
   const jF = document.getElementById('listFilterJurisdiction').value;
   const cF = document.getElementById('listFilterCategory').value;
   let rows = all.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (sF === 'claimed') rows = rows.filter(r => r.claimed);
+  if (sF === 'unclaimed') rows = rows.filter(r => !r.claimed);
   if (jF) rows = rows.filter(r => r.jurisdiction === jF);
   if (cF) rows = rows.filter(r => r.category === cF);
 
   const c = document.getElementById('listContainer');
-  if (!rows.length) { c.innerHTML = '<div class="empty">No receipts yet. Add one from the Add tab.</div>'; return; }
+  if (!rows.length) { c.innerHTML = '<div class="empty">No receipts match. Add one from the Add tab.</div>'; return; }
   c.innerHTML = rows.map(r => {
     const thumb = r.image ? '<img class="thumb" src="' + urlFor(r.image) + '" alt="">' : '<div class="thumb"></div>';
-    return '<div class="receipt-row">' + thumb +
-      '<div class="meta"><div class="merchant">' + escapeHTML(r.merchant) + '</div>' +
+    return '<div class="receipt-row" onclick="openEdit(\'' + r.id + '\')">' + thumb +
+      '<div class="meta"><div class="merchant">' + escapeHTML(r.merchant || '(no merchant)') + '</div>' +
       '<div class="sub"><span class="tag ' + (r.jurisdiction === 'Ireland' ? 'ireland' : 'london') + '">' + r.jurisdiction + '</span>' +
+      (r.claimed ? '<span class="tag claimed">Claimed</span>' : '') +
       fmtDate(r.date) + ' · ' + escapeHTML(r.category) + (r.companions ? ' · ' + escapeHTML(r.companions) : '') + '</div></div>' +
       '<div class="amount">' + fmtAmount(r.amount, r.currency) + '</div>' +
-      '<button class="btn danger" style="padding:6px 9px;font-size:11px;" onclick="deleteReceipt(\'' + r.id + '\')">Del</button></div>';
+      '<button class="btn danger" style="padding:6px 9px;font-size:11px;" onclick="event.stopPropagation();deleteReceipt(\'' + r.id + '\')">Del</button></div>';
   }).join('');
 }
+document.getElementById('listFilterStatus').addEventListener('change', renderList);
 document.getElementById('listFilterJurisdiction').addEventListener('change', renderList);
 document.getElementById('listFilterCategory').addEventListener('change', renderList);
 
 function escapeHTML(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function checkIssues(rows) {
+  const issues = [];
+  rows.forEach(r => {
+    const list = [];
+    if (!r.merchant) list.push('no merchant');
+    if (!r.amount || r.amount <= 0) list.push('no amount');
+    if (!r.date) list.push('no date');
+    if (!r.image) list.push('no photo');
+    if ((r.category === 'Client entertainment' || r.category === 'Meals') && !r.companions) list.push('no attendees listed');
+    if (list.length) issues.push({ r, list });
+  });
+  return issues;
 }
 
 async function buildReport() {
@@ -739,13 +1261,33 @@ async function buildReport() {
   const from = document.getElementById('reportFrom').value;
   const to = document.getElementById('reportTo').value;
   const j = document.getElementById('reportJurisdiction').value;
+  const st = document.getElementById('reportStatus').value;
 
   let rows = all.slice();
+  if (st === 'claimed') rows = rows.filter(r => r.claimed);
+  if (st === 'unclaimed') rows = rows.filter(r => !r.claimed);
   if (from) rows = rows.filter(r => r.date && r.date >= from);
   if (to) rows = rows.filter(r => r.date && r.date <= to);
   if (j) rows = rows.filter(r => r.jurisdiction === j);
   rows.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   reportSet = rows;
+
+  // Pre-flight
+  const pf = document.getElementById('preflightPanel');
+  const issues = checkIssues(rows);
+  if (!rows.length) {
+    pf.innerHTML = '';
+  } else if (!issues.length) {
+    pf.innerHTML = '<div class="preflight clean"><div class="pf-title">All ' + rows.length + ' receipts look complete</div></div>';
+  } else {
+    pf.innerHTML = '<div class="preflight"><div class="pf-title">' + issues.length +
+      ' item' + (issues.length === 1 ? '' : 's') + ' need attention</div>' +
+      issues.map(({ r, list }) =>
+        '<div class="pf-item" onclick="openEdit(\'' + r.id + '\')">' +
+        escapeHTML(r.merchant || '(no merchant)') + ' ' + fmtDate(r.date) +
+        ' — <span>' + list.join(', ') + '</span></div>'
+      ).join('') + '</div>';
+  }
 
   const totals = {};
   rows.forEach(r => {
@@ -773,6 +1315,28 @@ async function buildReport() {
              : '<div class="detail-line" style="font-style:italic;">No photo attached</div>') +
     '</div>'
   ).join('');
+
+  // Claim action
+  const ca = document.getElementById('claimActions');
+  const unclaimed = rows.filter(r => !r.claimed);
+  ca.innerHTML = unclaimed.length
+    ? '<button class="btn full" style="margin-top:6px;" onclick="markClaimed()">Mark these ' + unclaimed.length + ' as claimed</button>' +
+      '<div class="helptext" style="margin-top:8px;text-align:center;">Do this once the claim is submitted, so they drop out of the next report.</div>'
+    : '';
+}
+
+async function markClaimed() {
+  const unclaimed = reportSet.filter(r => !r.claimed);
+  if (!unclaimed.length) return;
+  if (!confirm('Mark ' + unclaimed.length + ' receipts as claimed? They will no longer appear in the unclaimed report.')) return;
+  const stamp = new Date().toISOString();
+  for (const r of unclaimed) {
+    r.claimed = true;
+    r.claimedAt = stamp;
+    await putReceipt(r);
+  }
+  showToast(unclaimed.length + ' marked as claimed');
+  buildReport();
 }
 
 /* ---------- PDF ---------- */
@@ -1026,8 +1590,11 @@ async function exportBackup() {
     delete copy.image;
     out.push(copy);
   }
-  downloadBlob(new Blob([JSON.stringify({ version: 1, exported: new Date().toISOString(), receipts: out }, null, 2)],
-    { type: 'application/json' }), 'receipts-backup.json');
+  downloadBackup({ version: 2, exported: new Date().toISOString(), apiKey: apiKey || null, receipts: out });
+}
+
+function downloadBackup(payload) {
+  downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }), 'receipts-backup.json');
   showToast('Backup exported');
 }
 
@@ -1038,7 +1605,7 @@ document.getElementById('restoreInput').addEventListener('change', async (e) => 
     const parsed = JSON.parse(await file.text());
     let n = 0;
     for (const r of parsed.receipts || []) {
-      const rec = Object.assign({}, r);
+      const rec = Object.assign({ claimed: false, claimedAt: null }, r);
       if (r.imageBase64) {
         const bin = atob(r.imageBase64);
         const arr = new Uint8Array(bin.length);
@@ -1050,6 +1617,12 @@ document.getElementById('restoreInput').addEventListener('change', async (e) => 
       n++;
     }
     showToast('Restored ' + n + ' receipts');
+    if (parsed.apiKey) {
+      await setSetting('apiKey', parsed.apiKey);
+      apiKey = parsed.apiKey;
+      document.getElementById('fApiKey').value = parsed.apiKey;
+      document.getElementById('keyStatus').innerHTML = '<span class="pill ok">Saved</span> API key restored from backup.';
+    }
     refreshCount();
   } catch (err) {
     console.error(err);
@@ -1059,6 +1632,13 @@ document.getElementById('restoreInput').addEventListener('change', async (e) => 
 });
 
 /* ---------- Settings ---------- */
+function toggleKeyVisible() {
+  const f = document.getElementById('fApiKey');
+  const b = document.getElementById('keyToggleBtn');
+  if (f.type === 'password') { f.type = 'text'; b.textContent = 'Hide'; }
+  else { f.type = 'password'; b.textContent = 'Show'; }
+}
+
 async function saveApiKey() {
   const v = document.getElementById('fApiKey').value.trim();
   await setSetting('apiKey', v);
@@ -1140,7 +1720,9 @@ async function refreshStorageStatus() {
   }
   document.getElementById('fDate').valueAsDate = new Date();
   document.getElementById('reportTo').valueAsDate = new Date();
+  setCurrency('EUR');
   await refreshCount();
+  await refreshPeopleChips();
   if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch (e) {} }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(reg => {
