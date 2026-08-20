@@ -1,4 +1,4 @@
-const CACHE = 'receipts-v5';
+const CACHE = 'receipts-v9';
 const ASSETS = [
   './', './index.html', './manifest.json', './icon.svg',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
