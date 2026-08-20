@@ -1,0 +1,19 @@
+{
+  "name": "Receipts",
+  "short_name": "Receipts",
+  "description": "Capture expense receipts and produce claim reports",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F6F5F1",
+  "theme_color": "#0B4F6C",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
