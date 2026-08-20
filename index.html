@@ -328,6 +328,15 @@
   <!-- SETTINGS -->
   <div class="view" id="view-settings">
     <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:8px;">App version</div>
+      <div class="status-line" id="versionStatus">Checking...</div>
+      <button class="btn full" style="margin-top:12px;" onclick="forceUpdate()">Clear cache and update</button>
+      <div class="helptext" style="margin-top:10px;">
+        Your receipts are not affected by this. They live in a separate database that updating never touches.
+      </div>
+    </div>
+
+    <div class="card">
       <div style="font-weight:700;font-size:15px;margin-bottom:8px;">Storage</div>
       <div class="status-line" id="storageStatus">Checking...</div>
       <button class="btn full" style="margin-top:12px;" onclick="requestPersist()">Request permanent storage</button>
@@ -371,6 +380,7 @@
 
 <script>
 /* ---------- IndexedDB ---------- */
+const APP_VERSION = '1.4';
 const DB_NAME = 'receipts-db';
 const DB_VERSION = 1;
 let db = null;
@@ -458,7 +468,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     window.scrollTo(0, 0);
     if (btn.dataset.view === 'list') renderList();
     if (btn.dataset.view === 'report') buildReport();
-    if (btn.dataset.view === 'settings') refreshStorageStatus();
+    if (btn.dataset.view === 'settings') { refreshStorageStatus(); showVersion(); }
   });
 });
 
@@ -742,12 +752,12 @@ async function buildReport() {
     const k = r.jurisdiction + '|' + r.currency;
     totals[k] = (totals[k] || 0) + r.amount;
   });
-  const entries = Object.entries(totals);
+  const entries = Object.entries(totals).sort((a, b) => a[0].localeCompare(b[0]));
   document.getElementById('totalsGrid').innerHTML = entries.length
     ? entries.map(([k, v]) => {
         const [jj, cur] = k.split('|');
         return '<div class="total-card ' + (jj === 'Ireland' ? 'ireland' : 'london') + '">' +
-          '<div class="label">' + jj + ' total</div><div class="value">' + fmtAmount(v, cur) + '</div></div>';
+          '<div class="label">' + jj + ' · ' + cur + '</div><div class="value">' + fmtAmount(v, cur) + '</div></div>';
       }).join('')
     : '<div class="empty" style="grid-column:1/-1;">No receipts match this filter</div>';
 
@@ -821,43 +831,75 @@ async function exportPDF() {
   doc.text('Totals', M, ty);
   ty += 5;
   doc.setFont('helvetica', 'normal');
-  Object.entries(totals).forEach(([k, v]) => {
+  Object.entries(totals).sort((a, b) => a[0].localeCompare(b[0])).forEach(([k, v]) => {
     const [j, cur] = k.split('|');
-    doc.text(j, M, ty);
+    doc.text(j + ' (' + cur + ')', M, ty);
     doc.text(fmtAmount(v, cur), PW - M, ty, { align: 'right' });
     ty += 5;
   });
-
-  // Table
-  ty += 4;
-  doc.setDrawColor(200);
-  doc.line(M, ty, PW - M, ty);
-  ty += 5;
-  doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  const cols = { date: M, merchant: M + 20, cat: M + 62, juris: M + 100, who: M + 122, amt: PW - M };
-  doc.text('Date', cols.date, ty);
-  doc.text('Merchant', cols.merchant, ty);
-  doc.text('Category', cols.cat, ty);
-  doc.text('Region', cols.juris, ty);
-  doc.text('Who with / purpose', cols.who, ty);
-  doc.text('Amount', cols.amt, ty, { align: 'right' });
+  doc.setTextColor(120);
+  doc.text('Currencies are totalled separately and not converted.', M, ty);
+  doc.setTextColor(0);
+  doc.setFontSize(10);
   ty += 2;
-  doc.line(M, ty, PW - M, ty);
-  ty += 4.5;
 
-  doc.setFont('helvetica', 'normal');
-  reportSet.forEach((r, i) => {
-    if (ty > PH - 20) { doc.addPage(); ty = 20; }
-    doc.text(fmtDate(r.date), cols.date, ty);
-    doc.text(doc.splitTextToSize(r.merchant || '', 40)[0] || '', cols.merchant, ty);
-    doc.text(doc.splitTextToSize(r.category || '', 36)[0] || '', cols.cat, ty);
-    doc.text(r.jurisdiction === 'London' ? 'London' : 'Ireland', cols.juris, ty);
-    doc.text(doc.splitTextToSize(r.companions || '', 58)[0] || '', cols.who, ty);
-    doc.text(fmtAmount(r.amount, r.currency), cols.amt, ty, { align: 'right' });
-    ty += 5;
+  // Table: fixed columns that never overlap, with wrapping rows
+  ty += 4;
+  const COL = {
+    date:  { x: M,        w: 19 },
+    merch: { x: M + 20,   w: 38 },
+    cat:   { x: M + 62,   w: 30 },
+    reg:   { x: M + 94,   w: 17 },
+    who:   { x: M + 112,  w: 44 },
+    amtR:  PW - M
+  };
+  const LH = 3.8;
+
+  function tableHeader(y) {
+    doc.setDrawColor(200);
+    doc.line(M, y, PW - M, y);
+    y += 5;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('Date', COL.date.x, y);
+    doc.text('Merchant', COL.merch.x, y);
+    doc.text('Category', COL.cat.x, y);
+    doc.text('Region', COL.reg.x, y);
+    doc.text('Who with / purpose', COL.who.x, y);
+    doc.text('Amount', COL.amtR, y, { align: 'right' });
+    y += 2;
+    doc.setDrawColor(200);
+    doc.line(M, y, PW - M, y);
+    doc.setFont('helvetica', 'normal');
+    return y + 4.5;
+  }
+
+  ty = tableHeader(ty);
+
+  reportSet.forEach(r => {
+    const merchL = doc.splitTextToSize(r.merchant || '', COL.merch.w);
+    const catL = doc.splitTextToSize(r.category || '', COL.cat.w);
+    const whoL = doc.splitTextToSize(r.companions || '', COL.who.w);
+    const lines = Math.max(1, merchL.length, catL.length, whoL.length);
+    const rowH = lines * LH + 2.2;
+
+    if (ty + rowH > PH - 18) {
+      doc.addPage();
+      ty = 20;
+      ty = tableHeader(ty);
+    }
+
+    doc.text(fmtDate(r.date), COL.date.x, ty);
+    doc.text(merchL, COL.merch.x, ty);
+    doc.text(catL, COL.cat.x, ty);
+    doc.text(r.jurisdiction === 'London' ? 'London' : 'Ireland', COL.reg.x, ty);
+    if (whoL.length) doc.text(whoL, COL.who.x, ty);
+    doc.text(fmtAmount(r.amount, r.currency), COL.amtR, ty, { align: 'right' });
+
+    ty += rowH;
     doc.setDrawColor(235);
-    doc.line(M, ty - 1.8, PW - M, ty - 1.8);
+    doc.line(M, ty - 2.2, PW - M, ty - 2.2);
   });
 
   // --- One page per receipt ---
@@ -868,10 +910,13 @@ async function exportPDF() {
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text((i + 1) + '. ' + (r.merchant || ''), M, y);
-    doc.setFontSize(12);
-    doc.text(fmtAmount(r.amount, r.currency), PW - M, y, { align: 'right' });
-    y += 6;
+    const amtStr = fmtAmount(r.amount, r.currency);
+    const amtW = doc.getTextWidth(amtStr);
+    const titleW = PW - 2 * M - amtW - 6;
+    const titleLines = doc.splitTextToSize((i + 1) + '. ' + (r.merchant || ''), titleW);
+    doc.text(titleLines, M, y);
+    doc.text(amtStr, PW - M, y, { align: 'right' });
+    y += titleLines.length * 5.5 + 1;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -1023,6 +1068,31 @@ async function saveApiKey() {
     : '<span class="pill warn">Cleared</span> You will type details manually.';
 }
 
+async function forceUpdate() {
+  showToast('Clearing cache...');
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch (e) { console.error(e); }
+  // cache-busting reload
+  location.replace(location.pathname + '?v=' + Date.now());
+}
+
+function showVersion() {
+  const el = document.getElementById('versionStatus');
+  const pdfReady = !!(window.jspdf && window.jspdf.jsPDF);
+  el.innerHTML =
+    'Running version <b>' + APP_VERSION + '</b><br>' +
+    (pdfReady ? '<span class="pill ok">PDF ready</span> PDF export available.'
+              : '<span class="pill warn">PDF unavailable</span> Library did not load.');
+}
+
 async function requestPersist() {
   if (!navigator.storage || !navigator.storage.persist) { showToast('Not supported on this browser'); return; }
   const granted = await navigator.storage.persist();
@@ -1073,7 +1143,15 @@ async function refreshStorageStatus() {
   await refreshCount();
   if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch (e) {} }
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(e => console.log('SW registration skipped', e));
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.update();
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloading) return;
+        reloading = true;
+        location.reload();
+      });
+    }).catch(e => console.log('SW registration skipped', e));
   }
 })();
 </script>
