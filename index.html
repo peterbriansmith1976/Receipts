@@ -286,6 +286,13 @@
   .helptext ol { padding-left: 18px; margin: 8px 0; }
   .helptext li { margin-bottom: 5px; }
 
+  .select-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px; font-size: 13px; color: var(--ink-soft); font-weight: 600;
+  }
+  .receipt-row.selected { border-color: var(--accent); background: var(--hint-soft); }
+  .row-check { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--accent); }
+
   /* ---------- Redesigned Add screen ---------- */
   .stub {
     background: var(--card);
@@ -548,12 +555,26 @@
       </select>
       <select id="listFilterCategory"><option value="">All categories</option></select>
     </div>
-    <div class="helptext no-print" style="margin:-6px 2px 12px;">Tap a receipt to edit it.</div>
+    <div class="no-print" style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn" type="button" id="selectModeBtn" onclick="toggleSelectMode()">Select receipts</button>
+    </div>
+    <div class="select-toolbar no-print" id="selectToolbar" style="display:none;">
+      <span id="selectCount">0 selected</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" type="button" onclick="selectAllVisible()">Select all</button>
+        <button class="btn" type="button" onclick="clearSelection()">Clear</button>
+      </div>
+    </div>
+    <div class="helptext no-print" id="listHint" style="margin:-6px 2px 12px;">Tap a receipt to edit it.</div>
     <div id="listContainer"></div>
   </div>
 
   <!-- REPORT -->
   <div class="view" id="view-report">
+    <div class="edit-banner no-print" id="manualBanner" style="display:none;">
+      <span id="manualCount">0 receipts selected manually</span>
+      <button class="btn" type="button" onclick="clearManualSelection()">Use filters instead</button>
+    </div>
     <div class="filters no-print">
       <select id="reportStatus">
         <option value="unclaimed">Unclaimed only</option>
@@ -571,7 +592,7 @@
       <input type="date" id="reportTo" aria-label="To date">
     </div>
     <div class="export-bar">
-      <button class="btn" onclick="buildReport()">Apply filter</button>
+      <button class="btn" id="reportApplyBtn" onclick="buildReport()">Apply filter</button>
       <button class="btn" onclick="exportCSV()">CSV</button>
       <button class="btn primary" onclick="exportPDF()">PDF</button>
     </div>
@@ -646,11 +667,14 @@
 <div class="save-dock" id="saveDock">
   <button class="btn primary" id="saveBtn" onclick="saveReceipt()">Save receipt</button>
 </div>
+<div class="save-dock no-print" id="selectDock" style="display:none;">
+  <button class="btn primary" type="button" onclick="buildReportFromSelection()">Add <span id="selectDockCount">0</span> to report</button>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
 /* ---------- IndexedDB ---------- */
-const APP_VERSION = '2.2';
+const APP_VERSION = '2.3';
 const DB_NAME = 'receipts-db';
 const DB_VERSION = 1;
 let db = null;
@@ -711,6 +735,9 @@ let currentPreviewURL = null;
 let jurisdiction = 'Ireland';
 let apiKey = null;
 let reportSet = [];
+let selectMode = false;
+let selectedIds = new Set();
+let manualReportIds = null;
 const objectURLs = [];
 
 function showToast(msg) {
@@ -737,6 +764,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     document.getElementById('view-' + btn.dataset.view).classList.add('active');
     window.scrollTo(0, 0);
     document.getElementById('saveDock').style.display = btn.dataset.view === 'add' ? 'block' : 'none';
+    if (btn.dataset.view !== 'list') exitSelectMode();
     if (btn.dataset.view === 'add') refreshPeopleChips();
     if (btn.dataset.view === 'list') renderList();
     if (btn.dataset.view === 'report') buildReport();
@@ -1221,17 +1249,106 @@ async function renderList() {
   if (cF) rows = rows.filter(r => r.category === cF);
 
   const c = document.getElementById('listContainer');
-  if (!rows.length) { c.innerHTML = '<div class="empty">No receipts match. Add one from the Add tab.</div>'; return; }
-  c.innerHTML = rows.map(r => {
-    const thumb = r.image ? '<img class="thumb" src="' + urlFor(r.image) + '" alt="">' : '<div class="thumb"></div>';
-    return '<div class="receipt-row" onclick="openEdit(\'' + r.id + '\')">' + thumb +
-      '<div class="meta"><div class="merchant">' + escapeHTML(r.merchant || '(no merchant)') + '</div>' +
-      '<div class="sub"><span class="tag ' + (r.jurisdiction === 'Ireland' ? 'ireland' : 'london') + '">' + r.jurisdiction + '</span>' +
-      (r.claimed ? '<span class="tag claimed">Claimed</span>' : '') +
-      fmtDate(r.date) + ' · ' + escapeHTML(r.category) + (r.companions ? ' · ' + escapeHTML(r.companions) : '') + '</div></div>' +
-      '<div class="amount">' + fmtAmount(r.amount, r.currency) + '</div>' +
-      '<button class="btn danger" style="padding:6px 9px;font-size:11px;" onclick="event.stopPropagation();deleteReceipt(\'' + r.id + '\')">Del</button></div>';
-  }).join('');
+  if (!rows.length) {
+    c.innerHTML = '<div class="empty">No receipts match. Add one from the Add tab.</div>';
+  } else {
+    c.innerHTML = rows.map(r => {
+      const thumb = r.image ? '<img class="thumb" src="' + urlFor(r.image) + '" alt="">' : '<div class="thumb"></div>';
+      const checkbox = selectMode
+        ? '<input type="checkbox" class="row-check" ' + (selectedIds.has(r.id) ? 'checked' : '') + '>'
+        : '';
+      const rowClick = selectMode ? "toggleSelectRow('" + r.id + "')" : "openEdit('" + r.id + "')";
+      const delBtn = selectMode ? '' :
+        '<button class="btn danger" style="padding:6px 9px;font-size:11px;" onclick="event.stopPropagation();deleteReceipt(\'' + r.id + '\')">Del</button>';
+      return '<div class="receipt-row' + (selectMode && selectedIds.has(r.id) ? ' selected' : '') + '" data-id="' + r.id + '" onclick="' + rowClick + '">' + checkbox + thumb +
+        '<div class="meta"><div class="merchant">' + escapeHTML(r.merchant || '(no merchant)') + '</div>' +
+        '<div class="sub"><span class="tag ' + (r.jurisdiction === 'Ireland' ? 'ireland' : 'london') + '">' + r.jurisdiction + '</span>' +
+        (r.claimed ? '<span class="tag claimed">Claimed</span>' : '') +
+        fmtDate(r.date) + ' · ' + escapeHTML(r.category) + (r.companions ? ' · ' + escapeHTML(r.companions) : '') + '</div></div>' +
+        '<div class="amount">' + fmtAmount(r.amount, r.currency) + '</div>' +
+        delBtn + '</div>';
+    }).join('');
+  }
+  refreshSelectCount();
+}
+
+/* ---------- Manual selection for reports ---------- */
+function toggleSelectMode() {
+  selectMode = !selectMode;
+  if (!selectMode) selectedIds.clear();
+  document.getElementById('selectModeBtn').textContent = selectMode ? 'Cancel' : 'Select receipts';
+  document.getElementById('selectToolbar').style.display = selectMode ? 'flex' : 'none';
+  document.getElementById('listHint').textContent = selectMode
+    ? 'Tap a receipt to select it for a report.'
+    : 'Tap a receipt to edit it.';
+  renderList();
+}
+
+function exitSelectMode() {
+  if (!selectMode) return;
+  selectMode = false;
+  selectedIds.clear();
+  const btn = document.getElementById('selectModeBtn');
+  if (btn) btn.textContent = 'Select receipts';
+  const toolbar = document.getElementById('selectToolbar');
+  if (toolbar) toolbar.style.display = 'none';
+  const hint = document.getElementById('listHint');
+  if (hint) hint.textContent = 'Tap a receipt to edit it.';
+  updateSelectDock();
+}
+
+function toggleSelectRow(id) {
+  if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+  const row = document.querySelector('.receipt-row[data-id="' + id + '"]');
+  if (row) {
+    row.classList.toggle('selected', selectedIds.has(id));
+    const cb = row.querySelector('.row-check');
+    if (cb) cb.checked = selectedIds.has(id);
+  }
+  refreshSelectCount();
+}
+
+function selectAllVisible() {
+  document.querySelectorAll('#listContainer .receipt-row').forEach(row => selectedIds.add(row.dataset.id));
+  renderList();
+}
+
+function clearSelection() {
+  selectedIds.clear();
+  renderList();
+}
+
+function refreshSelectCount() {
+  const el = document.getElementById('selectCount');
+  if (el) {
+    const n = selectedIds.size;
+    el.textContent = n + (n === 1 ? ' selected' : ' selected');
+  }
+  updateSelectDock();
+}
+
+function updateSelectDock() {
+  const dock = document.getElementById('selectDock');
+  if (!dock) return;
+  const n = selectedIds.size;
+  if (selectMode && n > 0) {
+    dock.style.display = 'block';
+    document.getElementById('selectDockCount').textContent = n;
+  } else {
+    dock.style.display = 'none';
+  }
+}
+
+function buildReportFromSelection() {
+  if (!selectedIds.size) return;
+  manualReportIds = new Set(selectedIds);
+  exitSelectMode();
+  document.querySelector('nav.tabs button[data-view="report"]').click();
+}
+
+function clearManualSelection() {
+  manualReportIds = null;
+  buildReport();
 }
 document.getElementById('listFilterStatus').addEventListener('change', renderList);
 document.getElementById('listFilterJurisdiction').addEventListener('change', renderList);
@@ -1258,18 +1375,32 @@ function checkIssues(rows) {
 async function buildReport() {
   releaseURLs();
   const all = await getAllReceipts();
-  const from = document.getElementById('reportFrom').value;
-  const to = document.getElementById('reportTo').value;
-  const j = document.getElementById('reportJurisdiction').value;
-  const st = document.getElementById('reportStatus').value;
+  const manual = !!manualReportIds;
 
-  let rows = all.slice();
-  if (st === 'claimed') rows = rows.filter(r => r.claimed);
-  if (st === 'unclaimed') rows = rows.filter(r => !r.claimed);
-  if (from) rows = rows.filter(r => r.date && r.date >= from);
-  if (to) rows = rows.filter(r => r.date && r.date <= to);
-  if (j) rows = rows.filter(r => r.jurisdiction === j);
-  rows.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  document.querySelectorAll('#view-report .filters').forEach(el => { el.style.display = manual ? 'none' : ''; });
+  document.getElementById('reportApplyBtn').style.display = manual ? 'none' : '';
+  document.getElementById('manualBanner').style.display = manual ? 'flex' : 'none';
+
+  let rows;
+  if (manual) {
+    rows = all.filter(r => manualReportIds.has(r.id));
+    rows.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    document.getElementById('manualCount').textContent =
+      rows.length + (rows.length === 1 ? ' receipt selected manually' : ' receipts selected manually');
+  } else {
+    const from = document.getElementById('reportFrom').value;
+    const to = document.getElementById('reportTo').value;
+    const j = document.getElementById('reportJurisdiction').value;
+    const st = document.getElementById('reportStatus').value;
+
+    rows = all.slice();
+    if (st === 'claimed') rows = rows.filter(r => r.claimed);
+    if (st === 'unclaimed') rows = rows.filter(r => !r.claimed);
+    if (from) rows = rows.filter(r => r.date && r.date >= from);
+    if (to) rows = rows.filter(r => r.date && r.date <= to);
+    if (j) rows = rows.filter(r => r.jurisdiction === j);
+    rows.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  }
   reportSet = rows;
 
   // Pre-flight
