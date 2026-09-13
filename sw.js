@@ -1,4 +1,4 @@
-const CACHE = 'receipts-v11';
+const CACHE = 'receipts-v12';
 const ASSETS = [
   './', './index.html', './manifest.json', './icon.svg',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
@@ -22,8 +22,11 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  // Never cache API calls
+  // Never cache API calls. Firebase manages its own network/retry/offline
+  // behavior — let those requests pass straight through untouched.
   if (url.hostname.endsWith('anthropic.com')) return;
+  if (['firestore.googleapis.com', 'firebasestorage.googleapis.com', 'identitytoolkit.googleapis.com',
+       'securetoken.googleapis.com', 'firebaseinstallations.googleapis.com'].includes(url.hostname)) return;
   if (e.request.method !== 'GET') return;
 
   e.respondWith(
@@ -32,7 +35,8 @@ self.addEventListener('fetch', (e) => {
         const cacheable = url.origin === self.location.origin ||
           url.hostname === 'cdnjs.cloudflare.com' ||
           url.hostname === 'fonts.googleapis.com' ||
-          url.hostname === 'fonts.gstatic.com';
+          url.hostname === 'fonts.gstatic.com' ||
+          url.hostname === 'www.gstatic.com';
         if (res && res.status === 200 && cacheable) {
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));

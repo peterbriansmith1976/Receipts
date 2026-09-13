@@ -13,6 +13,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <title>Receipts</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-storage-compat.js"></script>
 <style>
   :root, [data-theme="dark"] {
     --paper: #0C1D24;
@@ -441,7 +445,23 @@
 </style>
 </head>
 <body>
-<div class="app">
+<div class="app" id="authGate" style="display:none;">
+  <header class="top">
+    <h1>Receipts</h1>
+  </header>
+  <div class="card">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Sign in</div>
+    <div class="helptext" style="margin-bottom:10px;">Your receipts and photos sync to your account and follow you to any device you sign in on here.</div>
+    <label>Email</label>
+    <input type="text" id="authEmail" autocomplete="email" inputmode="email" placeholder="you@example.com">
+    <label>Password</label>
+    <input type="password" id="authPassword" autocomplete="current-password" placeholder="At least 6 characters">
+    <button class="btn primary full" style="margin-top:12px;" type="button" onclick="authSignIn()">Sign in</button>
+    <button class="btn full" style="margin-top:8px;" type="button" onclick="authSignUp()">Create account</button>
+    <div class="status-line" id="authStatus"></div>
+  </div>
+</div>
+<div class="app" id="mainApp" style="display:none;">
   <header class="top">
     <h1>Receipts</h1>
     <div class="sub" id="headerCount">loading</div>
@@ -605,6 +625,19 @@
   <!-- SETTINGS -->
   <div class="view" id="view-settings">
     <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:8px;">Account</div>
+      <div class="status-line" id="accountStatus">Not signed in</div>
+      <button class="btn full" style="margin-top:12px;" type="button" onclick="authSignOut()">Sign out</button>
+    </div>
+
+    <div class="card" id="migrateCard" style="display:none;">
+      <div style="font-weight:700;font-size:15px;margin-bottom:8px;">Migrate local receipts</div>
+      <div class="helptext" id="migrateHelp">This device has receipts saved from before sync was added.</div>
+      <button class="btn full" style="margin-top:12px;" type="button" onclick="migrateLocalReceipts()">Migrate local receipts</button>
+      <div class="status-line" id="migrateStatus"></div>
+    </div>
+
+    <div class="card">
       <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Appearance</div>
       <div class="theme-seg" id="themeSeg">
         <button type="button" data-theme-val="dark">Night</button>
@@ -664,7 +697,7 @@
     </div>
   </div>
 </div>
-<div class="save-dock" id="saveDock">
+<div class="save-dock" id="saveDock" style="display:none;">
   <button class="btn primary" id="saveBtn" onclick="saveReceipt()">Save receipt</button>
 </div>
 <div class="save-dock no-print" id="selectDock" style="display:none;">
@@ -673,33 +706,52 @@
 <div class="toast" id="toast"></div>
 
 <script>
-/* ---------- IndexedDB ---------- */
-const APP_VERSION = '2.3';
-const DB_NAME = 'receipts-db';
-const DB_VERSION = 1;
-let db = null;
+/* ---------- Firebase ---------- */
+const APP_VERSION = '3.0';
 
-function openDB() {
+// Paste your own project's values here (Firebase console > Project settings > Your apps).
+// This is a public client identifier, not a secret — access is enforced by the
+// Firestore/Storage security rules, not by hiding this config.
+const firebaseConfig = {
+  apiKey: 'YOUR_API_KEY',
+  authDomain: 'YOUR_PROJECT.firebaseapp.com',
+  projectId: 'YOUR_PROJECT',
+  storageBucket: 'YOUR_PROJECT.appspot.com',
+  messagingSenderId: 'YOUR_SENDER_ID',
+  appId: 'YOUR_APP_ID'
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const firestore = firebase.firestore();
+const storage = firebase.storage();
+try { firestore.enablePersistence({ synchronizeTabs: true }); } catch (e) { console.log('Firestore persistence unavailable', e); }
+
+let currentUser = null;
+let cachedReceipts = [];
+let receiptsUnsub = null;
+
+/* ---------- Local photo cache ----------
+   Firestore's offline persistence covers receipt metadata, but not Storage.
+   Photos are cached locally (for instant, offline-safe display) and queued
+   for upload when a save happens while offline. */
+const PHOTO_DB_NAME = 'receipts-photo-cache';
+let photoDb = null;
+
+function openPhotoDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const req = indexedDB.open(PHOTO_DB_NAME, 1);
     req.onupgradeneeded = (e) => {
       const d = e.target.result;
-      if (!d.objectStoreNames.contains('receipts')) {
-        const s = d.createObjectStore('receipts', { keyPath: 'id' });
-        s.createIndex('date', 'date');
-      }
-      if (!d.objectStoreNames.contains('settings')) {
-        d.createObjectStore('settings', { keyPath: 'key' });
-      }
+      if (!d.objectStoreNames.contains('photos')) d.createObjectStore('photos');
+      if (!d.objectStoreNames.contains('pendingUploads')) d.createObjectStore('pendingUploads');
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
-
-function tx(store, mode, fn) {
+function photoTx(store, mode, fn) {
   return new Promise((resolve, reject) => {
-    const t = db.transaction(store, mode);
+    const t = photoDb.transaction(store, mode);
     const s = t.objectStore(store);
     let result;
     try { result = fn(s); } catch (e) { reject(e); return; }
@@ -708,30 +760,227 @@ function tx(store, mode, fn) {
     t.onabort = () => reject(t.error);
   });
 }
-
-async function putReceipt(rec) { return tx('receipts', 'readwrite', s => s.put(rec)); }
-async function deleteReceiptDB(id) { return tx('receipts', 'readwrite', s => s.delete(id)); }
-async function getAllReceipts() {
-  return new Promise((resolve, reject) => {
-    const t = db.transaction('receipts', 'readonly');
-    const req = t.objectStore('receipts').getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => reject(req.error);
-  });
-}
-async function setSetting(key, value) { return tx('settings', 'readwrite', s => s.put({ key, value })); }
-async function getSetting(key) {
+async function cachePhotoBlob(id, blob) { return photoTx('photos', 'readwrite', s => s.put(blob, id)); }
+async function getCachedPhotoBlob(id) {
   return new Promise((resolve) => {
-    const t = db.transaction('settings', 'readonly');
-    const req = t.objectStore('settings').get(key);
-    req.onsuccess = () => resolve(req.result ? req.result.value : null);
+    const t = photoDb.transaction('photos', 'readonly');
+    const req = t.objectStore('photos').get(id);
+    req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => resolve(null);
   });
 }
+async function queuePendingUpload(id, blob) { return photoTx('pendingUploads', 'readwrite', s => s.put(blob, id)); }
+async function clearPendingUpload(id) { return photoTx('pendingUploads', 'readwrite', s => s.delete(id)); }
+async function getAllPendingUploads() {
+  return new Promise((resolve) => {
+    const out = [];
+    const t = photoDb.transaction('pendingUploads', 'readonly');
+    const req = t.objectStore('pendingUploads').openCursor();
+    req.onsuccess = (e) => {
+      const cur = e.target.result;
+      if (cur) { out.push({ id: cur.key, blob: cur.value }); cur.continue(); }
+      else resolve(out);
+    };
+    req.onerror = () => resolve(out);
+  });
+}
+
+async function uploadPhoto(id, blob) {
+  try {
+    const path = 'users/' + currentUser.uid + '/receipts/' + id + '.jpg';
+    await storage.ref(path).put(blob);
+    await receiptsCol().doc(id).update({ photoPath: path });
+    await clearPendingUpload(id);
+  } catch (e) {
+    console.error('photo upload failed, queued for retry', e);
+    try { await queuePendingUpload(id, blob); } catch (e2) {}
+  }
+}
+async function flushPendingUploads() {
+  if (!currentUser) return;
+  let pending;
+  try { pending = await getAllPendingUploads(); } catch (e) { return; }
+  for (const { id, blob } of pending) await uploadPhoto(id, blob);
+}
+window.addEventListener('online', flushPendingUploads);
+
+async function getPhotoBlob(rec) {
+  if (!rec) return null;
+  const cached = await getCachedPhotoBlob(rec.id);
+  if (cached) return cached;
+  if (!rec.photoPath) return null;
+  try {
+    const url = await storage.ref(rec.photoPath).getDownloadURL();
+    const res = await fetch(url);
+    const blob = await res.blob();
+    await cachePhotoBlob(rec.id, blob);
+    return blob;
+  } catch (e) {
+    console.error('photo fetch failed', e);
+    return null;
+  }
+}
+
+/* ---------- Firestore-backed receipt store ---------- */
+function receiptsCol() { return firestore.collection('users').doc(currentUser.uid).collection('receipts'); }
+function settingsDoc() { return firestore.collection('users').doc(currentUser.uid).collection('settings').doc('app'); }
+
+function startReceiptsListener() {
+  if (receiptsUnsub) receiptsUnsub();
+  receiptsUnsub = receiptsCol().onSnapshot(snap => {
+    cachedReceipts = snap.docs.map(d => d.data());
+    refreshCount();
+    if (document.getElementById('view-list').classList.contains('active')) renderList();
+    if (document.getElementById('view-report').classList.contains('active')) buildReport();
+    if (document.getElementById('view-add').classList.contains('active')) refreshPeopleChips();
+  }, err => console.error('receipts listener error', err));
+}
+
+// isNewPhoto: true when rec.image is a freshly captured/chosen Blob that needs
+// uploading. Editing a receipt without touching its photo passes false, so the
+// existing remote photoPath is left alone (merge:true) instead of re-uploaded.
+async function putReceipt(rec, isNewPhoto) {
+  const toWrite = Object.assign({}, rec);
+  delete toWrite.image;
+  toWrite.updatedAt = Date.now();
+  await receiptsCol().doc(rec.id).set(toWrite, { merge: true });
+  if (isNewPhoto && rec.image) {
+    await cachePhotoBlob(rec.id, rec.image);
+    uploadPhoto(rec.id, rec.image);
+  }
+}
+async function deleteReceiptDB(id) {
+  await receiptsCol().doc(id).delete();
+  try { await photoTx('photos', 'readwrite', s => s.delete(id)); } catch (e) {}
+  try { await clearPendingUpload(id); } catch (e) {}
+}
+async function getAllReceipts() { return cachedReceipts.slice(); }
+
+async function setSetting(key, value) { return settingsDoc().set({ [key]: value }, { merge: true }); }
+async function getSetting(key) {
+  try {
+    const doc = await settingsDoc().get();
+    const data = doc.exists ? doc.data() : null;
+    return data && data[key] != null ? data[key] : null;
+  } catch (e) { return null; }
+}
+
+/* ---------- One-time migration of pre-sync local data ---------- */
+const LEGACY_DB_NAME = 'receipts-db';
+function openLegacyDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(LEGACY_DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('receipts')) d.createObjectStore('receipts', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('settings')) d.createObjectStore('settings', { keyPath: 'key' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function getLegacyReceipts() {
+  try {
+    const d = await openLegacyDB();
+    return await new Promise((resolve, reject) => {
+      const t = d.transaction('receipts', 'readonly');
+      const req = t.objectStore('receipts').getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (e) { return []; }
+}
+async function checkMigration() {
+  const card = document.getElementById('migrateCard');
+  if (!card) return;
+  const legacy = await getLegacyReceipts();
+  if (legacy.length) {
+    card.style.display = 'block';
+    document.getElementById('migrateHelp').textContent =
+      'This device has ' + legacy.length + ' receipt' + (legacy.length === 1 ? '' : 's') +
+      ' saved from before sync was added. Upload them to your account so they show up everywhere.';
+  } else {
+    card.style.display = 'none';
+  }
+}
+async function migrateLocalReceipts() {
+  const legacy = await getLegacyReceipts();
+  const existingIds = new Set(cachedReceipts.map(r => r.id));
+  const todo = legacy.filter(r => !existingIds.has(r.id));
+  if (!todo.length) { showToast('Nothing new to migrate'); checkMigration(); return; }
+  const status = document.getElementById('migrateStatus');
+  let done = 0;
+  status.textContent = 'Migrating 0 / ' + todo.length + '...';
+  for (const r of todo) {
+    await putReceipt(Object.assign({}, r), !!r.image);
+    done++;
+    status.textContent = 'Migrating ' + done + ' / ' + todo.length + '...';
+  }
+  showToast('Migrated ' + done + ' receipt' + (done === 1 ? '' : 's'));
+  status.textContent = '';
+  checkMigration();
+}
+
+/* ---------- Auth ---------- */
+function showAuthGate() {
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('authGate').style.display = 'block';
+}
+function showMainApp() {
+  document.getElementById('authGate').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('saveDock').style.display =
+    document.getElementById('view-add').classList.contains('active') ? 'block' : 'none';
+}
+function authErrorMessage(e) {
+  const map = {
+    'auth/invalid-email': 'That email address looks wrong.',
+    'auth/user-not-found': 'No account with that email. Try Create account instead.',
+    'auth/wrong-password': 'Wrong password.',
+    'auth/email-already-in-use': 'An account already exists for that email. Try Sign in instead.',
+    'auth/weak-password': 'Password must be at least 6 characters.',
+    'auth/network-request-failed': 'No connection. Check your network and try again.'
+  };
+  return (e && map[e.code]) || (e && e.message) || 'Something went wrong.';
+}
+async function authSignIn() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const status = document.getElementById('authStatus');
+  if (!email || !password) { status.textContent = 'Enter an email and password.'; return; }
+  status.textContent = 'Signing in...';
+  try { await auth.signInWithEmailAndPassword(email, password); }
+  catch (e) { status.textContent = authErrorMessage(e); }
+}
+async function authSignUp() {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const status = document.getElementById('authStatus');
+  if (!email || !password) { status.textContent = 'Enter an email and password.'; return; }
+  status.textContent = 'Creating account...';
+  try { await auth.createUserWithEmailAndPassword(email, password); }
+  catch (e) { status.textContent = authErrorMessage(e); }
+}
+async function authSignOut() { await auth.signOut(); }
+
+auth.onAuthStateChanged(async (user) => {
+  if (receiptsUnsub) { receiptsUnsub(); receiptsUnsub = null; }
+  if (!user) {
+    currentUser = null;
+    cachedReceipts = [];
+    showAuthGate();
+    return;
+  }
+  currentUser = user;
+  document.getElementById('accountStatus').textContent = 'Signed in as ' + user.email;
+  showMainApp();
+  await runApp();
+});
 
 /* ---------- UI helpers ---------- */
 let currentBlob = null;
 let currentPreviewURL = null;
+let photoChanged = false;
 let jurisdiction = 'Ireland';
 let apiKey = null;
 let reportSet = [];
@@ -768,7 +1017,7 @@ document.querySelectorAll('nav.tabs button').forEach(btn => {
     if (btn.dataset.view === 'add') refreshPeopleChips();
     if (btn.dataset.view === 'list') renderList();
     if (btn.dataset.view === 'report') buildReport();
-    if (btn.dataset.view === 'settings') { refreshStorageStatus(); showVersion(); }
+    if (btn.dataset.view === 'settings') { refreshStorageStatus(); showVersion(); checkMigration(); }
   });
 });
 
@@ -851,6 +1100,7 @@ function handleFile(file, inputEl) {
       try {
         // 1600px keeps small print legible; Blob storage means size is not a constraint
         currentBlob = await compressToBlob(img, 1600, 0.82);
+        photoChanged = true;
         if (currentPreviewURL) URL.revokeObjectURL(currentPreviewURL);
         currentPreviewURL = URL.createObjectURL(currentBlob);
         showPhoto(currentPreviewURL);
@@ -998,6 +1248,7 @@ async function scanReceipt() {
 /* ---------- Save ---------- */
 function resetForm() {
   currentBlob = null;
+  photoChanged = false;
   if (currentPreviewURL) { URL.revokeObjectURL(currentPreviewURL); currentPreviewURL = null; }
   clearPhoto();
   document.getElementById('fDate').valueAsDate = new Date();
@@ -1034,10 +1285,12 @@ async function openEdit(id) {
   if (!r) { showToast('Receipt not found'); return; }
 
   editingId = id;
-  currentBlob = r.image || null;
+  photoChanged = false;
+  const blob = await getPhotoBlob(r);
+  currentBlob = blob || null;
   if (currentPreviewURL) { URL.revokeObjectURL(currentPreviewURL); currentPreviewURL = null; }
-  if (r.image) {
-    currentPreviewURL = URL.createObjectURL(r.image);
+  if (blob) {
+    currentPreviewURL = URL.createObjectURL(blob);
     showPhoto(currentPreviewURL);
   } else {
     clearPhoto();
@@ -1093,7 +1346,7 @@ async function saveReceipt() {
   };
 
   try {
-    await putReceipt(rec);
+    await putReceipt(rec, photoChanged);
     showToast(editingId ? 'Receipt updated' : 'Receipt saved');
     editingId = null;
     setEditMode(false);
@@ -1150,7 +1403,7 @@ async function handleBatch(files) {
         createdAt: Date.now() + i
       };
       if (!parsed || !parsed.merchant || typeof parsed.amount !== 'number') unread++;
-      await putReceipt(rec);
+      await putReceipt(rec, true);
       saved++;
     } catch (e) {
       console.error('batch item failed', e);
@@ -1252,8 +1505,9 @@ async function renderList() {
   if (!rows.length) {
     c.innerHTML = '<div class="empty">No receipts match. Add one from the Add tab.</div>';
   } else {
-    c.innerHTML = rows.map(r => {
-      const thumb = r.image ? '<img class="thumb" src="' + urlFor(r.image) + '" alt="">' : '<div class="thumb"></div>';
+    const parts = await Promise.all(rows.map(async r => {
+      const blob = await getPhotoBlob(r);
+      const thumb = blob ? '<img class="thumb" src="' + urlFor(blob) + '" alt="">' : '<div class="thumb"></div>';
       const checkbox = selectMode
         ? '<input type="checkbox" class="row-check" ' + (selectedIds.has(r.id) ? 'checked' : '') + '>'
         : '';
@@ -1267,7 +1521,8 @@ async function renderList() {
         fmtDate(r.date) + ' · ' + escapeHTML(r.category) + (r.companions ? ' · ' + escapeHTML(r.companions) : '') + '</div></div>' +
         '<div class="amount">' + fmtAmount(r.amount, r.currency) + '</div>' +
         delBtn + '</div>';
-    }).join('');
+    }));
+    c.innerHTML = parts.join('');
   }
   refreshSelectCount();
 }
@@ -1365,7 +1620,7 @@ function checkIssues(rows) {
     if (!r.merchant) list.push('no merchant');
     if (!r.amount || r.amount <= 0) list.push('no amount');
     if (!r.date) list.push('no date');
-    if (!r.image) list.push('no photo');
+    if (!r.photoPath) list.push('no photo');
     if ((r.category === 'Client entertainment' || r.category === 'Meals') && !r.companions) list.push('no attendees listed');
     if (list.length) issues.push({ r, list });
   });
@@ -1434,18 +1689,20 @@ async function buildReport() {
       }).join('')
     : '<div class="empty" style="grid-column:1/-1;">No receipts match this filter</div>';
 
-  document.getElementById('reportContainer').innerHTML = rows.map(r =>
-    '<div class="report-item"><div class="head"><div>' +
-    '<div class="merchant">' + escapeHTML(r.merchant) + '</div>' +
-    '<div class="date">' + fmtDate(r.date) + ' · <span class="tag ' + (r.jurisdiction === 'Ireland' ? 'ireland' : 'london') + '">' +
-    r.jurisdiction + '</span> ' + escapeHTML(r.category) + '</div></div>' +
-    '<div class="amount">' + fmtAmount(r.amount, r.currency) + '</div></div>' +
-    (r.companions ? '<div class="detail-line"><b>Who with / purpose:</b> ' + escapeHTML(r.companions) + '</div>' : '') +
-    (r.notes ? '<div class="detail-line"><b>Notes:</b> ' + escapeHTML(r.notes) + '</div>' : '') +
-    (r.image ? '<img class="receipt-img" src="' + urlFor(r.image) + '" alt="Receipt">'
-             : '<div class="detail-line" style="font-style:italic;">No photo attached</div>') +
-    '</div>'
-  ).join('');
+  const reportParts = await Promise.all(rows.map(async r => {
+    const blob = await getPhotoBlob(r);
+    return '<div class="report-item"><div class="head"><div>' +
+      '<div class="merchant">' + escapeHTML(r.merchant) + '</div>' +
+      '<div class="date">' + fmtDate(r.date) + ' · <span class="tag ' + (r.jurisdiction === 'Ireland' ? 'ireland' : 'london') + '">' +
+      r.jurisdiction + '</span> ' + escapeHTML(r.category) + '</div></div>' +
+      '<div class="amount">' + fmtAmount(r.amount, r.currency) + '</div></div>' +
+      (r.companions ? '<div class="detail-line"><b>Who with / purpose:</b> ' + escapeHTML(r.companions) + '</div>' : '') +
+      (r.notes ? '<div class="detail-line"><b>Notes:</b> ' + escapeHTML(r.notes) + '</div>' : '') +
+      (blob ? '<img class="receipt-img" src="' + urlFor(blob) + '" alt="Receipt">'
+            : '<div class="detail-line" style="font-style:italic;">No photo attached</div>') +
+      '</div>';
+  }));
+  document.getElementById('reportContainer').innerHTML = reportParts.join('');
 
   // Claim action
   const ca = document.getElementById('claimActions');
@@ -1464,7 +1721,7 @@ async function markClaimed() {
   for (const r of unclaimed) {
     r.claimed = true;
     r.claimedAt = stamp;
-    await putReceipt(r);
+    await putReceipt(r, false);
   }
   showToast(unclaimed.length + ' marked as claimed');
   buildReport();
@@ -1633,9 +1890,10 @@ async function exportPDF() {
     doc.setTextColor(0);
     y += 3;
 
-    if (r.image) {
+    const photoBlob = await getPhotoBlob(r);
+    if (photoBlob) {
       try {
-        const dataURL = await blobToDataURL(r.image);
+        const dataURL = await blobToDataURL(photoBlob);
         const size = await imageSize(dataURL);
         if (size.w && size.h) {
           const availW = PW - 2 * M;
@@ -1717,7 +1975,8 @@ async function exportBackup() {
   const out = [];
   for (const r of all) {
     const copy = Object.assign({}, r);
-    if (r.image) copy.imageBase64 = await blobToBase64(r.image);
+    const blob = await getPhotoBlob(r);
+    if (blob) copy.imageBase64 = await blobToBase64(blob);
     delete copy.image;
     out.push(copy);
   }
@@ -1744,7 +2003,7 @@ document.getElementById('restoreInput').addEventListener('change', async (e) => 
         rec.image = new Blob([arr], { type: 'image/jpeg' });
       }
       delete rec.imageBase64;
-      await putReceipt(rec);
+      await putReceipt(rec, !!rec.image);
       n++;
     }
     showToast('Restored ' + n + ' receipts');
@@ -1834,14 +2093,12 @@ async function refreshStorageStatus() {
 }
 
 /* ---------- Init ---------- */
-(async function init() {
-  try {
-    db = await openDB();
-  } catch (e) {
-    console.error(e);
-    showToast('Could not open local database');
-    return;
-  }
+(async function initPhotoCache() {
+  try { photoDb = await openPhotoDb(); } catch (e) { console.error('Could not open photo cache', e); }
+})();
+
+async function runApp() {
+  startReceiptsListener();
   apiKey = await getSetting('apiKey');
   if (apiKey) {
     document.getElementById('fApiKey').value = apiKey;
@@ -1852,8 +2109,7 @@ async function refreshStorageStatus() {
   document.getElementById('fDate').valueAsDate = new Date();
   document.getElementById('reportTo').valueAsDate = new Date();
   setCurrency('EUR');
-  await refreshCount();
-  await refreshPeopleChips();
+  await flushPendingUploads();
   if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch (e) {} }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(reg => {
@@ -1866,7 +2122,7 @@ async function refreshStorageStatus() {
       });
     }).catch(e => console.log('SW registration skipped', e));
   }
-})();
+}
 </script>
 </body>
 </html>
