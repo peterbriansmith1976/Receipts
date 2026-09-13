@@ -707,7 +707,7 @@
 
 <script>
 /* ---------- Firebase ---------- */
-const APP_VERSION = '3.1';
+const APP_VERSION = '3.2';
 
 // Paste your own project's values here (Firebase console > Project settings > Your apps).
 // This is a public client identifier, not a secret — access is enforced by the
@@ -890,15 +890,32 @@ async function getLegacyReceipts() {
     });
   } catch (e) { return []; }
 }
+async function getLegacySetting(key) {
+  try {
+    const d = await openLegacyDB();
+    return await new Promise((resolve) => {
+      const t = d.transaction('settings', 'readonly');
+      const req = t.objectStore('settings').get(key);
+      req.onsuccess = () => resolve(req.result ? req.result.value : null);
+      req.onerror = () => resolve(null);
+    });
+  } catch (e) { return null; }
+}
 async function checkMigration() {
   const card = document.getElementById('migrateCard');
   if (!card) return;
   const legacy = await getLegacyReceipts();
-  if (legacy.length) {
+  const existingIds = new Set(cachedReceipts.map(r => r.id));
+  const pendingReceipts = legacy.filter(r => !existingIds.has(r.id));
+  const legacyKey = !apiKey ? await getLegacySetting('apiKey') : null;
+
+  if (pendingReceipts.length || legacyKey) {
     card.style.display = 'block';
+    const parts = [];
+    if (pendingReceipts.length) parts.push(pendingReceipts.length + ' receipt' + (pendingReceipts.length === 1 ? '' : 's'));
+    if (legacyKey) parts.push('your API key');
     document.getElementById('migrateHelp').textContent =
-      'This device has ' + legacy.length + ' receipt' + (legacy.length === 1 ? '' : 's') +
-      ' saved from before sync was added. Upload them to your account so they show up everywhere.';
+      'This device has ' + parts.join(' and ') + ' saved from before sync was added. Migrate them to your account so they show up everywhere.';
   } else {
     card.style.display = 'none';
   }
@@ -907,7 +924,25 @@ async function migrateLocalReceipts() {
   const legacy = await getLegacyReceipts();
   const existingIds = new Set(cachedReceipts.map(r => r.id));
   const todo = legacy.filter(r => !existingIds.has(r.id));
-  if (!todo.length) { showToast('Nothing new to migrate'); checkMigration(); return; }
+
+  let keyMigrated = false;
+  if (!apiKey) {
+    const legacyKey = await getLegacySetting('apiKey');
+    if (legacyKey) {
+      await setSetting('apiKey', legacyKey);
+      apiKey = legacyKey;
+      document.getElementById('fApiKey').value = legacyKey;
+      document.getElementById('keyStatus').innerHTML = '<span class="pill ok">Saved</span> Photos will be read automatically.';
+      keyMigrated = true;
+    }
+  }
+
+  if (!todo.length) {
+    showToast(keyMigrated ? 'API key migrated' : 'Nothing new to migrate');
+    checkMigration();
+    return;
+  }
+
   const status = document.getElementById('migrateStatus');
   let done = 0;
   status.textContent = 'Migrating 0 / ' + todo.length + '...';
@@ -916,7 +951,7 @@ async function migrateLocalReceipts() {
     done++;
     status.textContent = 'Migrating ' + done + ' / ' + todo.length + '...';
   }
-  showToast('Migrated ' + done + ' receipt' + (done === 1 ? '' : 's'));
+  showToast('Migrated ' + done + ' receipt' + (done === 1 ? '' : 's') + (keyMigrated ? ' and your API key' : ''));
   status.textContent = '';
   checkMigration();
 }
