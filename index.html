@@ -707,7 +707,7 @@
 
 <script>
 /* ---------- Firebase ---------- */
-const APP_VERSION = '3.2';
+const APP_VERSION = '3.3';
 
 // Paste your own project's values here (Firebase console > Project settings > Your apps).
 // This is a public client identifier, not a secret — access is enforced by the
@@ -1401,7 +1401,7 @@ function setBatchProgress(msg) {
     el = document.createElement('div');
     el.id = 'batchProgress';
     el.className = 'batch-progress';
-    document.querySelector('#view-add .card').appendChild(el);
+    document.getElementById('view-add').appendChild(el);
   }
   if (msg === null) { el.classList.remove('show'); return; }
   el.classList.add('show');
